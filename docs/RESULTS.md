@@ -497,6 +497,28 @@ if:
 - `frames.accuracy` or `musique.answer_f1` drops >3 points absolute
 - `frames.citation_precision` drops >3 points absolute
 - `frames.cost_per_query_usd` or `musique.cost_per_query_usd` rises >25% relative
+- `frames.task_completion_rate` or `musique.task_completion_rate` drops >3
+  points absolute (added mid-session — see the finding right below)
+
+**A real gap this session's own sanity-checking surfaced, before pushing
+the deliberately-broken demo PR**: none of the first three metrics above
+can actually be moved by a real agent-side regression when CI has no
+`ANTHROPIC_API_KEY` (i.e. every PR-smoke run, by this session's own design).
+`frames.accuracy`/`citation_precision` are judge-scored, and
+`FakeLLMClient`'s judge branches (`eval/fake_llm.py`) return
+`self._rng.random() < 0.7` / `< 0.8` — a verdict with **zero dependence on
+the run's actual content**, so no code change can move their aggregate away
+from ~70%/~80% ± sampling noise. `musique.answer_f1`'s own baseline
+(0.021) sits so close to its floor that even total answer collapse (every
+report empty) only drops it by ~2 points — under the 3-point tolerance.
+Verified this the hard way: the originally-planned deliberately-broken
+change (`candidate_pool_size` 6→0, cutting off all retrieved content)
+measured a negligible, noise-level shift in `answer_f1`/`answer_contains_gold`
+locally, not the clear regression expected. Added `task_completion_rate`
+(`runs.status == "completed"` fraction — already a designed agentic metric,
+docs/DESIGN.md §5.2) as a fourth gated metric specifically because it has
+none of these blind spots: it doesn't route through the judge at all, and
+it isn't floor-bound. The deliberately-broken PR below targets this metric.
 
 These are this session's literal numbers, not CLAUDE.md's placeholder
 5-point/30%-latency thresholds — CLAUDE.md's own text calls those
@@ -528,8 +550,10 @@ kind of number. `results/ci_baseline.json`:
 | `frames.accuracy` | 0.700 |
 | `frames.citation_precision` | 0.700 |
 | `frames.cost_per_query_usd` | $0.0000 (FakeLLMClient — real cost needs a live key) |
+| `frames.task_completion_rate` | 1.000 |
 | `musique.answer_f1` | 0.021 |
 | `musique.cost_per_query_usd` | $0.0000 |
+| `musique.task_completion_rate` | 1.000 |
 
 `.github/workflows/nightly.yml`: `eval-full` + the reliability job, uploads
 `results/*.json` as an artifact every run (`if: always()`), and only commits
@@ -556,16 +580,17 @@ git's own transport. The workflow: three branches pushed by this session —
 2. `demo/ci-gate-clean` — a no-op-equivalent change, should go **green**
    with a before/after/delta comment table showing no regression.
 3. `demo/ci-gate-broken` — one deliberate regression:
-   `RunConfig.candidate_pool_size` dropped from `6` to `0`
-   (`src/deepresearch/config.py`), meaning `search_backend.search(...,
-   max_results=0)` returns zero results, so every worker's source block is
-   empty and `mean_answer_contains_gold`/`answer_f1` collapse toward zero —
-   deterministic and mechanical under *both* `FakeLLMClient` and a real
-   model (a real model given zero source content also can't answer
-   correctly), unlike corrupting a prompt string (which `FakeLLMClient`
-   doesn't even read, so that specific suggested break wouldn't have been
-   visible under this sandbox's fake-LLM constraint — noted here as a
-   documented substitution, not a deviation done quietly).
+   `BudgetConfig.max_total_tokens` dropped from `200_000` to `10`
+   (`src/deepresearch/config.py`) — a very plausible real mistake (a typo,
+   or a units mix-up between "tokens" and "thousands of tokens"). The
+   planner's own first call already spends more than 10 tokens, so
+   `budget.check()` raises `BudgetExceeded` before a single worker runs,
+   for every question, deterministically, regardless of LLM backend —
+   `runs.status` becomes `budget_exceeded` instead of `completed` for the
+   whole benchmark, crashing `task_completion_rate` from 1.0 to 0.0. This
+   replaces an earlier plan (disabling rerank / cutting `candidate_pool_size`
+   to 0) that, on local sanity-checking before push, turned out to barely
+   move any FakeLLMClient-scored metric at all — see the finding above.
 
 [Outcomes of PRs 2 and 3 filled in below once opened — see the bottom of
 this section for the actual red/green results and the PR links.]
