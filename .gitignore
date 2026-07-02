@@ -9,7 +9,19 @@ trajectories/*.json
 !trajectories/.gitkeep
 *.db
 *.db-journal
-data/corpus/
+
+# data/corpus/ is normally regenerated on demand from HF Hub + Wikipedia
+# (eval/benchmarks/{frames,musique}.py), but the smoke/full subset actually
+# used by CI (n=20/n=100, seed 42) is committed below as a frozen snapshot
+# — GitHub Actions runners hit Wikipedia's edge WAF (403s) reliably enough
+# to make live ingestion unusable in CI, matching this project's own stated
+# reason for LocalCorpusBackend existing ("no live-web flakiness ... in
+# CI", docs/DESIGN.md §5.1) — see docs/RESULTS.md for the incident.
+data/corpus/*
+!data/corpus/frames/
+!data/corpus/frames/*.json
+!data/corpus/musique/
+!data/corpus/musique/*.json
 
 # Claude Code local tooling config/skills — not part of the project deliverable,
 # and settings.local.json specifically is meant to be per-machine, not shared.
