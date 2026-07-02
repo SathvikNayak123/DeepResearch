@@ -24,7 +24,7 @@ class BudgetConfig:
     """Explicit, configurable stopping criteria. "The agent decides" is not one."""
 
     max_replans: int = 2
-    max_total_tokens: int = 200_000
+    max_total_tokens: int = 10
     max_wall_clock_seconds: float = 600.0
     max_usd: float = 5.0
 
