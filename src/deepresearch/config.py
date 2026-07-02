@@ -49,7 +49,7 @@ class RunConfig:
     # default per that decision; "react" is the alternative this session's
     # ablation measures head-to-head — see docs/DESIGN.md's dated addendum.
     planning_style: str = field(default_factory=lambda: os.getenv("DEEPRESEARCH_PLANNING_STYLE", "plan_first"))
-    max_react_steps: int = 4  # bounded step ceiling for "react" mode, same role as max_replans
+    max_react_steps: int = 5  # bounded step ceiling for "react" mode, same role as max_replans
 
     # Retrieval quality (docs/DESIGN.md decision row 7). Default set by the
     # rerank ablation in docs/RESULTS.md, not a guess — see that doc before
