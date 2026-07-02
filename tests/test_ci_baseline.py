@@ -43,7 +43,22 @@ async def test_compute_current_metrics_averages_across_runs(db_url):
     metrics = await compute_current_metrics(db_url)
     assert metrics["frames.accuracy"] == pytest.approx(0.5)
     assert metrics["frames.cost_per_query_usd"] == pytest.approx(0.15)
+    assert metrics["frames.task_completion_rate"] == pytest.approx(1.0)  # both fixture runs completed
     assert "musique.answer_f1" not in metrics  # no musique rows inserted
+    assert "musique.task_completion_rate" not in metrics
+
+
+@pytest.mark.asyncio
+async def test_compute_current_metrics_task_completion_rate_with_mixed_statuses(db_url):
+    await db.init_schema(db_url)
+    statuses = ["completed", "completed", "completed", "budget_exceeded"]
+    for i, status in enumerate(statuses):
+        run_id = f"{'c' * 31}{i}"
+        await db.create_run(db_url, run_id=run_id, benchmark_name="musique", config={}, git_sha="abc", status="running")
+        await db.finish_run(db_url, run_id=run_id, status=status, total_cost_usd=0.0, total_latency_ms=100)
+
+    metrics = await compute_current_metrics(db_url)
+    assert metrics["musique.task_completion_rate"] == pytest.approx(0.75)
 
 
 def test_write_and_load_baseline_roundtrip(tmp_path):

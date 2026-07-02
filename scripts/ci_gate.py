@@ -2,7 +2,11 @@
 
 Compares the metrics from a just-finished eval-smoke run (in --database-url)
 against the checked-in baseline (--baseline, default results/ci_baseline.json)
-and fails (exit 1) if any tracked metric regresses beyond tolerance — see
+and fails (exit 1) if any tracked metric regresses beyond tolerance —
+accuracy/citation-precision/answer_f1 (-3pts), cost per query (+25%), and
+task_completion_rate (-3pts, added this session — see eval/ci_baseline.py's
+module comment for why the other three can't actually be exercised by a real
+regression under the FakeLLMClient fallback CI runs on). See
 eval/ci_baseline.py for the tolerances and the comparison/rendering logic
 itself (kept there, not here, so it's importable and unit-tested without
 shelling out — tests/test_ci_baseline.py).

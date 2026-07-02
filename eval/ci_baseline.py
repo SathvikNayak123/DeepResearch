@@ -33,6 +33,17 @@ _QUALITY_METRICS = {
     ("musique", "answer_f1"): "musique.answer_f1",
 }
 _COST_BENCHMARKS = ["frames", "musique"]
+# docs/DESIGN.md §5.2's own agentic metric ("did the run finish inside
+# budget with a synthesized report") — gated here too, not just reported,
+# because it's the one axis a real code regression can move deterministically
+# regardless of LLM backend. frames.accuracy/citation_precision are scored by
+# a judge that (under the FakeLLMClient fallback used when no API key is
+# configured) returns a verdict independent of the run's actual content, and
+# musique.answer_f1's own baseline sits too close to its floor for a 3-point
+# absolute tolerance to ever fire under that same fallback — see docs/RESULTS.md
+# for the measurement that surfaced this gap. completion_rate has no such
+# blind spot: it's a plain fraction of `runs.status == "completed"`.
+_COMPLETION_BENCHMARKS = ["frames", "musique"]
 
 # Session brief's literal tolerances (tighter than CLAUDE.md's placeholder
 # 5pt/30% numbers — flagged as a deliberate divergence in docs/RESULTS.md,
@@ -67,6 +78,14 @@ async def compute_current_metrics(database_url: str) -> dict[str, float]:
             values = [float(row[0]) for row in result.fetchall() if row[0] is not None]
             if values:
                 metrics[f"{benchmark_name}.cost_per_query_usd"] = sum(values) / len(values)
+
+        for benchmark_name in _COMPLETION_BENCHMARKS:
+            result = await conn.execute(select(runs.c.status).where(runs.c.benchmark_name == benchmark_name))
+            statuses = [row[0] for row in result.fetchall()]
+            if statuses:
+                metrics[f"{benchmark_name}.task_completion_rate"] = (
+                    sum(1 for status in statuses if status == "completed") / len(statuses)
+                )
 
     return metrics
 
