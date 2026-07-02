@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+trajectories/*.json
+!trajectories/.gitkeep
+*.db
+*.db-journal
+data/corpus/
+
+# Claude Code local tooling config/skills — not part of the project deliverable,
+# and settings.local.json specifically is meant to be per-machine, not shared.
+.claude/

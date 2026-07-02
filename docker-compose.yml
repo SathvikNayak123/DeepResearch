@@ -1,0 +1,148 @@
+# Docker Compose for the DeepResearch local stack.
+#
+# "app + Redis + Postgres + Langfuse" per the session brief — but Langfuse v3
+# self-hosting itself requires Postgres + ClickHouse + Redis + S3-compatible
+# storage (see docs/DESIGN.md §6), so the Langfuse tier below brings its own
+# dedicated postgres/redis/clickhouse/minio rather than sharing the app's.
+# This is a best-effort compose based on Langfuse's documented self-host
+# requirements — verify against
+# https://langfuse.com/self-hosting/deployment/docker-compose before relying
+# on it for anything beyond local dev.
+#
+# The app's own `redis` (search/fetch cache) and `postgres` (run store) are
+# both live: DATABASE_URL/REDIS_URL point the app at these services here;
+# locally without docker-compose they default to a SQLite file and
+# localhost Redis respectively (see .env.example).
+
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://deepresearch:deepresearch@postgres:5432/deepresearch
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./trajectories:/app/trajectories
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: deepresearch
+      POSTGRES_PASSWORD: deepresearch
+      POSTGRES_DB: deepresearch
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # --- Langfuse's own dependencies (self-hosted, v3 architecture) ---
+  langfuse-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_db_data:/var/lib/postgresql/data
+
+  langfuse-redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "langfuse"]
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    environment:
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: langfuse
+      CLICKHOUSE_DB: langfuse
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+
+  langfuse-minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: langfuse
+      MINIO_ROOT_PASSWORD: langfuse123
+
+  langfuse-web:
+    image: langfuse/langfuse:3
+    depends_on:
+      - langfuse-db
+      - langfuse-redis
+      - langfuse-clickhouse
+      - langfuse-minio
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      REDIS_CONNECTION_STRING: redis://:langfuse@langfuse-redis:6379
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: langfuse123
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      NEXTAUTH_URL: http://localhost:3000
+      SALT: ${LANGFUSE_SALT}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    depends_on:
+      - langfuse-db
+      - langfuse-redis
+      - langfuse-clickhouse
+      - langfuse-minio
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      REDIS_CONNECTION_STRING: redis://:langfuse@langfuse-redis:6379
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: langfuse123
+      SALT: ${LANGFUSE_SALT}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+
+  # --- Infra metrics (docs/DESIGN.md decision row 10): scrapes app:8000/metrics ---
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - app
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    ports:
+      - "3001:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  langfuse_db_data:
+  langfuse_clickhouse_data:

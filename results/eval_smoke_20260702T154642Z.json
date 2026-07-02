@@ -1,0 +1,38 @@
+{
+  "frames": {
+    "benchmark": "frames",
+    "n": 20,
+    "is_real_llm": false,
+    "wall_clock_seconds": 1703.7850441,
+    "mean_accuracy": 0.7,
+    "mean_citation_coverage": 1.0,
+    "mean_citation_precision": 0.7,
+    "trajectory": {
+      "task_completion_rate": 1.0,
+      "tool_call_success_rate": 1.0,
+      "mean_steps_per_solved_task": 5.2,
+      "mean_tokens_per_solved_task": 1850.35,
+      "n_runs": 20
+    },
+    "total_agent_cost_usd": 0.0,
+    "judge_calls_made": 40,
+    "judge_cache_hits": 0,
+    "judge_actual_cost_usd": 0.0
+  },
+  "musique": {
+    "benchmark": "musique",
+    "n": 20,
+    "is_real_llm": false,
+    "wall_clock_seconds": 118.35335090000035,
+    "mean_answer_f1": 0.01803046218487395,
+    "mean_answer_contains_gold": 0.05,
+    "trajectory": {
+      "task_completion_rate": 1.0,
+      "tool_call_success_rate": 1.0,
+      "mean_steps_per_solved_task": 8.0,
+      "mean_tokens_per_solved_task": 1323.9,
+      "n_runs": 20
+    },
+    "total_agent_cost_usd": 0.0
+  }
+}

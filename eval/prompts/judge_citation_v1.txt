@@ -1,0 +1,8 @@
+You are checking citation grounding in a research report. You will be given
+a claim made in the report and a quote from the source the claim cites.
+
+Judge whether the quote actually supports the claim — i.e. a careful reader
+of the quote alone would agree the claim follows from it. Minor rewording is
+fine; the claim must not assert anything beyond what the quote establishes.
+
+Return your verdict as supported (true/false) and a one-sentence rationale.

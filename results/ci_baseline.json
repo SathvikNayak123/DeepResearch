@@ -1,0 +1,13 @@
+{
+  "config": {
+    "seeded_from": "evals-as-a-system session's real eval-smoke run (frames n=20, musique aggregated over smoke n=20 + full n=100 = 120 completed runs) \u2014 reused rather than re-run this session for cost/time (same FakeLLMClient constraint applies to both), see docs/RESULTS.md"
+  },
+  "git_sha": "no-git",
+  "metrics": {
+    "frames.accuracy": 0.7,
+    "frames.citation_precision": 0.7,
+    "frames.cost_per_query_usd": 0.0,
+    "musique.answer_f1": 0.0210393583175,
+    "musique.cost_per_query_usd": 0.0
+  }
+}
