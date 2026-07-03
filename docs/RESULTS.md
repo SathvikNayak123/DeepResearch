@@ -624,5 +624,19 @@ git's own transport. The workflow: three branches pushed by this session —
    to 0) that, on local sanity-checking before push, turned out to barely
    move any FakeLLMClient-scored metric at all — see the finding above.
 
-[Outcomes of PRs 2 and 3 filled in below once opened — see the bottom of
-this section for the actual red/green results and the PR links.]
+**Actual outcomes** (after the rerank-download fix above; see that section
+for why the first attempt at each of these needed a re-run):
+
+| PR | Branch | Run | Conclusion | Comment |
+|---|---|---|---|---|
+| [#1](https://github.com/SathvikNayak123/DeepResearch/pull/1) | `bootstrap-ci-and-ablation` | [run 7](https://github.com/SathvikNayak123/DeepResearch/actions/runs/28644693703) | **success** | [PASS, no baseline drift](https://github.com/SathvikNayak123/DeepResearch/pull/1#issuecomment-4873670172) |
+| [#2](https://github.com/SathvikNayak123/DeepResearch/pull/2) | `demo/ci-gate-clean` | [run 8](https://github.com/SathvikNayak123/DeepResearch/actions/runs/28644702439) | **success** | [PASS — all 7 gated metrics `OK`, `musique.answer_f1` even ticked up 0.021→0.023 (noise)](https://github.com/SathvikNayak123/DeepResearch/pull/2#issuecomment-4873674479) |
+| [#3](https://github.com/SathvikNayak123/DeepResearch/pull/3) | `demo/ci-gate-broken` | [run 9](https://github.com/SathvikNayak123/DeepResearch/actions/runs/28644714256) | **failure** (job exits 1, as designed) | [FAIL — `frames.task_completion_rate` and `musique.task_completion_rate` both dropped 100 points (1.000→0.000); `frames.accuracy` -15, `frames.citation_precision` -70 (both judge-scored side effects of every run raising `BudgetExceeded`, not the metric this break specifically targets)](https://github.com/SathvikNayak123/DeepResearch/pull/3#issuecomment-4873674479) |
+
+Exactly the designed outcome: bootstrap and clean both green with a real
+before/after/delta table in the PR comment; broken red with
+`task_completion_rate` — the metric added specifically because it's immune
+to `FakeLLMClient`'s judge-RNG and F1-floor blind spots — named in the
+failure output on both benchmarks. PR #3 is left **open-then-closed,
+unmerged** as the retained evidence artifact per this session's brief; #1
+and #2 are left open for the user to merge at their discretion.
