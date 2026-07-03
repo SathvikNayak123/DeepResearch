@@ -1,0 +1,73 @@
+name: Nightly Full Eval
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # commits the refreshed baseline on green
+
+jobs:
+  eval-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Cache HF datasets/models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-cache-${{ runner.os }}
+
+      - name: Install deepresearch
+        run: pip install -e ".[dev,eval]"
+
+      # DEEPRESEARCH_RERANK_ENABLED=false: see pr-smoke.yml — bge-reranker-v2-m3
+      # download hangs on GH-hosted runners; safe no-op since candidate_pool_size
+      # == rerank_top_k == 6 (identical candidate set either way).
+      - name: Run eval-full (100q FRAMES + 100q MuSiQue, local corpus)
+        run: python -m eval.run_eval --mode full --database-url "sqlite+aiosqlite:///./nightly_run.db"
+        env:
+          DEEPRESEARCH_RERANK_ENABLED: "false"
+
+      # CLAUDE.md: "a 20-question subset must show an all-runs-consistent
+      # (pass^k) rate reported alongside every accuracy number" — never cite
+      # nightly's accuracy figures without this.
+      - name: Run reliability job (20q x 3 repeats)
+        run: python -m eval.run_eval --reliability --n 20 --repeats 3 --database-url "sqlite+aiosqlite:///./nightly_run.db"
+        env:
+          DEEPRESEARCH_RERANK_ENABLED: "false"
+
+      - name: Upload metric-table artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-results
+          path: results/*.json
+
+      # docs/DESIGN.md §6 / CLAUDE.md: "nightly: no auto-gate ... updates the
+      # baseline only on green." Exit 1 here means at least one run this
+      # session didn't finish with status=completed — the job stays green
+      # either way (no auto-gate), but the baseline commit is skipped so a
+      # crashed/budget-exceeded nightly can't quietly lower the bar for
+      # every future PR.
+      - name: Refresh baseline (only writes it if every run completed cleanly)
+        id: refresh
+        run: python scripts/dump_ci_baseline.py --database-url "sqlite+aiosqlite:///./nightly_run.db"
+        continue-on-error: true
+
+      - name: Commit updated baseline
+        if: steps.refresh.outcome == 'success'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/ci_baseline.json
+          git diff --cached --quiet || git commit -m "chore: refresh nightly CI baseline"
+          git diff --cached --quiet || git push

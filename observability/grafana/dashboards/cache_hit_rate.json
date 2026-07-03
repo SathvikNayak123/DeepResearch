@@ -1,0 +1,64 @@
+{
+  "title": "DeepResearch — Cache Hit Rate",
+  "uid": "deepresearch-cache",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Cache hit rate by type",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 1 },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (cache_type) (rate(deepresearch_cache_hits_total[5m])) / (sum by (cache_type) (rate(deepresearch_cache_hits_total[5m])) + sum by (cache_type) (rate(deepresearch_cache_misses_total[5m])))",
+          "legendFormat": "{{cache_type}} hit rate",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Cache hits vs misses (rate, 5m)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (cache_type) (rate(deepresearch_cache_hits_total[5m]))",
+          "legendFormat": "{{cache_type}} hits/s",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (cache_type) (rate(deepresearch_cache_misses_total[5m]))",
+          "legendFormat": "{{cache_type}} misses/s",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Total hits / misses (cumulative)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (cache_type) (deepresearch_cache_hits_total)",
+          "legendFormat": "{{cache_type}} hits (total)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (cache_type) (deepresearch_cache_misses_total)",
+          "legendFormat": "{{cache_type}} misses (total)",
+          "refId": "B"
+        }
+      ]
+    }
+  ]
+}

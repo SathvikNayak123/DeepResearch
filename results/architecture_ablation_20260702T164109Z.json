@@ -1,0 +1,70 @@
+{
+  "is_real_llm": false,
+  "n": 20,
+  "seed": 42,
+  "variants": [
+    {
+      "variant": "plan_first_pool4",
+      "config_overrides": {
+        "planning_style": "plan_first",
+        "max_workers": 4
+      },
+      "n": 20,
+      "wall_clock_seconds_total": 108.0062782999994,
+      "wall_clock_seconds_per_question": 5.40031391499997,
+      "mean_answer_f1": 0.01803046218487395,
+      "mean_answer_contains_gold": 0.05,
+      "total_agent_cost_usd": 0.0,
+      "mean_iterations_per_question": 1.0,
+      "trajectory": {
+        "task_completion_rate": 1.0,
+        "tool_call_success_rate": 1.0,
+        "mean_steps_per_solved_task": 8.0,
+        "mean_tokens_per_solved_task": 1323.9,
+        "n_runs": 20
+      }
+    },
+    {
+      "variant": "plan_first_pool1",
+      "config_overrides": {
+        "planning_style": "plan_first",
+        "max_workers": 1
+      },
+      "n": 20,
+      "wall_clock_seconds_total": 117.98805839999932,
+      "wall_clock_seconds_per_question": 5.899402919999966,
+      "mean_answer_f1": 0.026491229530022635,
+      "mean_answer_contains_gold": 0.1,
+      "total_agent_cost_usd": 0.0,
+      "mean_iterations_per_question": 1.0,
+      "trajectory": {
+        "task_completion_rate": 1.0,
+        "tool_call_success_rate": 1.0,
+        "mean_steps_per_solved_task": 8.0,
+        "mean_tokens_per_solved_task": 1323.85,
+        "n_runs": 20
+      }
+    },
+    {
+      "variant": "react",
+      "config_overrides": {
+        "planning_style": "react",
+        "max_react_steps": 4
+      },
+      "n": 20,
+      "wall_clock_seconds_total": 196.43336099999942,
+      "wall_clock_seconds_per_question": 9.821668049999971,
+      "mean_answer_f1": 0.012227588982807198,
+      "mean_answer_contains_gold": 0.0,
+      "total_agent_cost_usd": 0.0,
+      "mean_iterations_per_question": 2.0,
+      "trajectory": {
+        "task_completion_rate": 1.0,
+        "tool_call_success_rate": 1.0,
+        "mean_steps_per_solved_task": 16.0,
+        "mean_tokens_per_solved_task": 2505.95,
+        "n_runs": 20
+      }
+    }
+  ]
+}

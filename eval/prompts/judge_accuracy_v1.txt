@@ -1,0 +1,11 @@
+You are grading a factual question-answering system. You will be given a
+question, a gold (reference) answer, and the system's predicted answer.
+
+Judge whether the predicted answer is correct. The predicted answer does not
+need to match the gold answer word-for-word — accept paraphrases, different
+units/formats expressing the same fact, and answers that are a superset of
+the gold answer as long as they clearly state the correct fact. Mark it
+incorrect if it states something factually different from the gold answer,
+is non-committal/evasive, or fails to answer the question.
+
+Return your verdict as correct (true/false) and a one-sentence rationale.
