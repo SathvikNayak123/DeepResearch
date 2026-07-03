@@ -29,14 +29,21 @@ jobs:
       - name: Install deepresearch
         run: pip install -e ".[dev,eval]"
 
+      # DEEPRESEARCH_RERANK_ENABLED=false: see pr-smoke.yml — bge-reranker-v2-m3
+      # download hangs on GH-hosted runners; safe no-op since candidate_pool_size
+      # == rerank_top_k == 6 (identical candidate set either way).
       - name: Run eval-full (100q FRAMES + 100q MuSiQue, local corpus)
         run: python -m eval.run_eval --mode full --database-url "sqlite+aiosqlite:///./nightly_run.db"
+        env:
+          DEEPRESEARCH_RERANK_ENABLED: "false"
 
       # CLAUDE.md: "a 20-question subset must show an all-runs-consistent
       # (pass^k) rate reported alongside every accuracy number" — never cite
       # nightly's accuracy figures without this.
       - name: Run reliability job (20q x 3 repeats)
         run: python -m eval.run_eval --reliability --n 20 --repeats 3 --database-url "sqlite+aiosqlite:///./nightly_run.db"
+        env:
+          DEEPRESEARCH_RERANK_ENABLED: "false"
 
       - name: Upload metric-table artifact
         if: always()

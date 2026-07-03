@@ -563,6 +563,38 @@ in that invocation's database finished `status=completed`
 auto-gate" nightly policy (the job itself never fails red), while still
 refusing to quietly lower the bar from a crashed/budget-exceeded night.
 
+## CI network flakiness: two incidents, two fixes
+
+Getting the three demo PRs (below) to a trustworthy CI signal took two rounds
+of "the code is right, the runner's network isn't":
+
+1. **Corpus fetch.** The first 3 runs (all 3 branches) failed identically in
+   ~2 min at the corpus-loading step. Local repro (fresh `HF_HOME`, deleted
+   `data/corpus/`) succeeded fully, isolating it to something GitHub-Actions-
+   runner-specific — most likely Wikipedia's edge WAF blocking GitHub's
+   shared runner IP ranges (this same WAF's UA-sensitivity was already
+   documented earlier in this project). Fix: froze the actual FRAMES (20
+   files) and MuSiQue (100 files) corpus JSON used by `--mode smoke`/`--mode
+   full` and committed them to git (`.gitignore` narrowed from a blanket
+   `data/corpus/` exclusion to a pattern that keeps exactly those files) —
+   CI no longer touches Wikipedia at all.
+2. **Reranker model download.** With the corpus fix in, runs #4/#5
+   (`bootstrap-ci-and-ablation`, `demo/ci-gate-clean`) hung 30+ min at
+   `Generating test split` with no further progress and were manually
+   cancelled; run #6 (`demo/ci-gate-broken`) finished in 1m46s because its
+   deliberate regression (`BudgetConfig.max_total_tokens=10`) raises
+   `BudgetExceeded` before the pipeline ever reaches the reranker, so it
+   never hit the hang. Root cause: `BAAI/bge-reranker-v2-m3` is a ~1GB
+   cross-encoder pulled from the HF model hub on first use per
+   `src/deepresearch/rerank/bge.py`'s `_load()` — slow/stalled from GitHub's
+   runner IPs, same class of issue as (1) but hitting the model hub instead
+   of Wikipedia. Fix: `DEEPRESEARCH_RERANK_ENABLED=false` set as step-level
+   `env` in both `pr-smoke.yml` and `nightly.yml`. This is a genuine no-op
+   for every metric in scope here — `config.py`'s `candidate_pool_size` and
+   `rerank_top_k` are both `6`, so `worker.py` selects the identical
+   candidate set whether or not reranking runs; disabling it only removes
+   the download, it does not change what CI measures.
+
 ## Proving the gate works: bootstrap, clean, and deliberately-broken PRs
 
 Real GitHub repo, real push access (verified with a disposable probe branch/
