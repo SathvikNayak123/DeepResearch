@@ -1,0 +1,1007 @@
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+ <= read (data resources)
+
+Terraform will perform the following actions:
+
+  # random_password.postgres will be created
+  + resource "random_password" "postgres" {
+      + bcrypt_hash = (sensitive value)
+      + id          = (known after apply)
+      + length      = 24
+      + lower       = true
+      + min_lower   = 0
+      + min_numeric = 0
+      + min_special = 0
+      + min_upper   = 0
+      + number      = true
+      + numeric     = true
+      + result      = (sensitive value)
+      + special     = false
+      + upper       = true
+    }
+
+  # module.alb.aws_lb.app will be created
+  + resource "aws_lb" "app" {
+      + arn                                                          = (known after apply)
+      + arn_suffix                                                   = (known after apply)
+      + client_keep_alive                                            = 3600
+      + desync_mitigation_mode                                       = "defensive"
+      + dns_name                                                     = (known after apply)
+      + drop_invalid_header_fields                                   = false
+      + enable_deletion_protection                                   = false
+      + enable_http2                                                 = true
+      + enable_tls_version_and_cipher_suite_headers                  = false
+      + enable_waf_fail_open                                         = false
+      + enable_xff_client_port                                       = false
+      + enable_zonal_shift                                           = false
+      + enforce_security_group_inbound_rules_on_private_link_traffic = (known after apply)
+      + id                                                           = (known after apply)
+      + idle_timeout                                                 = 60
+      + internal                                                     = false
+      + ip_address_type                                              = (known after apply)
+      + load_balancer_type                                           = "application"
+      + name                                                         = "deepresearch-demo-alb"
+      + name_prefix                                                  = (known after apply)
+      + preserve_host_header                                         = false
+      + security_groups                                              = (known after apply)
+      + subnets                                                      = (known after apply)
+      + tags_all                                                     = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + vpc_id                                                       = (known after apply)
+      + xff_header_processing_mode                                   = "append"
+      + zone_id                                                      = (known after apply)
+
+      + subnet_mapping (known after apply)
+    }
+
+  # module.alb.aws_lb_listener.http will be created
+  + resource "aws_lb_listener" "http" {
+      + arn                                                                   = (known after apply)
+      + id                                                                    = (known after apply)
+      + load_balancer_arn                                                     = (known after apply)
+      + port                                                                  = 80
+      + protocol                                                              = "HTTP"
+      + routing_http_request_x_amzn_mtls_clientcert_header_name               = (known after apply)
+      + routing_http_request_x_amzn_mtls_clientcert_issuer_header_name        = (known after apply)
+      + routing_http_request_x_amzn_mtls_clientcert_leaf_header_name          = (known after apply)
+      + routing_http_request_x_amzn_mtls_clientcert_serial_number_header_name = (known after apply)
+      + routing_http_request_x_amzn_mtls_clientcert_subject_header_name       = (known after apply)
+      + routing_http_request_x_amzn_mtls_clientcert_validity_header_name      = (known after apply)
+      + routing_http_request_x_amzn_tls_cipher_suite_header_name              = (known after apply)
+      + routing_http_request_x_amzn_tls_version_header_name                   = (known after apply)
+      + routing_http_response_access_control_allow_credentials_header_value   = (known after apply)
+      + routing_http_response_access_control_allow_headers_header_value       = (known after apply)
+      + routing_http_response_access_control_allow_methods_header_value       = (known after apply)
+      + routing_http_response_access_control_allow_origin_header_value        = (known after apply)
+      + routing_http_response_access_control_expose_headers_header_value      = (known after apply)
+      + routing_http_response_access_control_max_age_header_value             = (known after apply)
+      + routing_http_response_content_security_policy_header_value            = (known after apply)
+      + routing_http_response_server_enabled                                  = (known after apply)
+      + routing_http_response_strict_transport_security_header_value          = (known after apply)
+      + routing_http_response_x_content_type_options_header_value             = (known after apply)
+      + routing_http_response_x_frame_options_header_value                    = (known after apply)
+      + ssl_policy                                                            = (known after apply)
+      + tags_all                                                              = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + tcp_idle_timeout_seconds                                              = (known after apply)
+
+      + default_action {
+          + order            = (known after apply)
+          + target_group_arn = (known after apply)
+          + type             = "forward"
+        }
+
+      + mutual_authentication (known after apply)
+    }
+
+  # module.alb.aws_lb_target_group.app will be created
+  + resource "aws_lb_target_group" "app" {
+      + arn                                = (known after apply)
+      + arn_suffix                         = (known after apply)
+      + connection_termination             = (known after apply)
+      + deregistration_delay               = "15"
+      + id                                 = (known after apply)
+      + ip_address_type                    = (known after apply)
+      + lambda_multi_value_headers_enabled = false
+      + load_balancer_arns                 = (known after apply)
+      + load_balancing_algorithm_type      = (known after apply)
+      + load_balancing_anomaly_mitigation  = (known after apply)
+      + load_balancing_cross_zone_enabled  = (known after apply)
+      + name                               = "deepresearch-demo-tg"
+      + name_prefix                        = (known after apply)
+      + port                               = 8000
+      + preserve_client_ip                 = (known after apply)
+      + protocol                           = "HTTP"
+      + protocol_version                   = (known after apply)
+      + proxy_protocol_v2                  = false
+      + slow_start                         = 0
+      + tags_all                           = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + target_type                        = "ip"
+      + vpc_id                             = (known after apply)
+
+      + health_check {
+          + enabled             = true
+          + healthy_threshold   = 2
+          + interval            = 15
+          + matcher             = "200"
+          + path                = "/health"
+          + port                = "traffic-port"
+          + protocol            = "HTTP"
+          + timeout             = 5
+          + unhealthy_threshold = 3
+        }
+
+      + stickiness (known after apply)
+
+      + target_failover (known after apply)
+
+      + target_group_health (known after apply)
+
+      + target_health_state (known after apply)
+    }
+
+  # module.alb.aws_security_group.alb will be created
+  + resource "aws_security_group" "alb" {
+      + arn                    = (known after apply)
+      + description            = "ALB: inbound HTTP from the internet, unrestricted outbound to the task SG"
+      + egress                 = [
+          + {
+              + cidr_blocks      = [
+                  + "0.0.0.0/0",
+                ]
+              + from_port        = 0
+              + ipv6_cidr_blocks = []
+              + prefix_list_ids  = []
+              + protocol         = "-1"
+              + security_groups  = []
+              + self             = false
+              + to_port          = 0
+                # (1 unchanged attribute hidden)
+            },
+        ]
+      + id                     = (known after apply)
+      + ingress                = [
+          + {
+              + cidr_blocks      = [
+                  + "0.0.0.0/0",
+                ]
+              + from_port        = 80
+              + ipv6_cidr_blocks = []
+              + prefix_list_ids  = []
+              + protocol         = "tcp"
+              + security_groups  = []
+              + self             = false
+              + to_port          = 80
+                # (1 unchanged attribute hidden)
+            },
+        ]
+      + name                   = "deepresearch-demo-alb"
+      + name_prefix            = (known after apply)
+      + owner_id               = (known after apply)
+      + revoke_rules_on_delete = false
+      + tags_all               = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + vpc_id                 = (known after apply)
+    }
+
+  # module.budget.aws_budgets_budget.monthly will be created
+  + resource "aws_budgets_budget" "monthly" {
+      + account_id        = (known after apply)
+      + arn               = (known after apply)
+      + budget_type       = "COST"
+      + id                = (known after apply)
+      + limit_amount      = "25"
+      + limit_unit        = "USD"
+      + name              = "deepresearch-demo-monthly"
+      + name_prefix       = (known after apply)
+      + tags_all          = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + time_period_end   = "2087-06-15_00:00"
+      + time_period_start = (known after apply)
+      + time_unit         = "MONTHLY"
+
+      + cost_filter {
+          + name   = "TagKeyValue"
+          + values = [
+              + "user:project$deepresearch",
+            ]
+        }
+
+      + cost_types (known after apply)
+
+      + notification {
+          + comparison_operator        = "GREATER_THAN"
+          + notification_type          = "ACTUAL"
+          + subscriber_email_addresses = [
+              + "sathviknayak2@gmail.com",
+            ]
+          + subscriber_sns_topic_arns  = []
+          + threshold                  = 80
+          + threshold_type             = "PERCENTAGE"
+        }
+      + notification {
+          + comparison_operator        = "GREATER_THAN"
+          + notification_type          = "FORECASTED"
+          + subscriber_email_addresses = [
+              + "sathviknayak2@gmail.com",
+            ]
+          + subscriber_sns_topic_arns  = []
+          + threshold                  = 100
+          + threshold_type             = "PERCENTAGE"
+        }
+    }
+
+  # module.ecr.aws_ecr_lifecycle_policy.app will be created
+  + resource "aws_ecr_lifecycle_policy" "app" {
+      + id          = (known after apply)
+      + policy      = jsonencode(
+            {
+              + rules = [
+                  + {
+                      + action       = {
+                          + type = "expire"
+                        }
+                      + description  = "expire untagged images after 1 day"
+                      + rulePriority = 1
+                      + selection    = {
+                          + countNumber = 1
+                          + countType   = "sinceImagePushed"
+                          + countUnit   = "days"
+                          + tagStatus   = "untagged"
+                        }
+                    },
+                  + {
+                      + action       = {
+                          + type = "expire"
+                        }
+                      + description  = "keep last 5 tagged images"
+                      + rulePriority = 2
+                      + selection    = {
+                          + countNumber   = 5
+                          + countType     = "imageCountMoreThan"
+                          + tagPrefixList = [
+                              + "v",
+                              + "latest",
+                            ]
+                          + tagStatus     = "tagged"
+                        }
+                    },
+                ]
+            }
+        )
+      + registry_id = (known after apply)
+      + repository  = "deepresearch-demo"
+    }
+
+  # module.ecr.aws_ecr_repository.app will be created
+  + resource "aws_ecr_repository" "app" {
+      + arn                  = (known after apply)
+      + force_delete         = true
+      + id                   = (known after apply)
+      + image_tag_mutability = "MUTABLE"
+      + name                 = "deepresearch-demo"
+      + registry_id          = (known after apply)
+      + repository_url       = (known after apply)
+      + tags_all             = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+
+      + image_scanning_configuration {
+          + scan_on_push = true
+        }
+    }
+
+  # module.ecs.aws_appautoscaling_policy.requests will be created
+  + resource "aws_appautoscaling_policy" "requests" {
+      + alarm_arns         = (known after apply)
+      + arn                = (known after apply)
+      + id                 = (known after apply)
+      + name               = "deepresearch-demo-requests-per-target"
+      + policy_type        = "TargetTrackingScaling"
+      + resource_id        = "service/deepresearch-demo/deepresearch-demo"
+      + scalable_dimension = "ecs:service:DesiredCount"
+      + service_namespace  = "ecs"
+
+      + target_tracking_scaling_policy_configuration {
+          + disable_scale_in   = false
+          + scale_in_cooldown  = 60
+          + scale_out_cooldown = 60
+          + target_value       = 50
+
+          + predefined_metric_specification {
+              + predefined_metric_type = "ALBRequestCountPerTarget"
+              + resource_label         = (known after apply)
+            }
+        }
+    }
+
+  # module.ecs.aws_appautoscaling_target.ecs will be created
+  + resource "aws_appautoscaling_target" "ecs" {
+      + arn                = (known after apply)
+      + id                 = (known after apply)
+      + max_capacity       = 2
+      + min_capacity       = 1
+      + resource_id        = "service/deepresearch-demo/deepresearch-demo"
+      + role_arn           = (known after apply)
+      + scalable_dimension = "ecs:service:DesiredCount"
+      + service_namespace  = "ecs"
+      + tags_all           = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+
+      + suspended_state (known after apply)
+    }
+
+  # module.ecs.aws_ecs_cluster.main will be created
+  + resource "aws_ecs_cluster" "main" {
+      + arn      = (known after apply)
+      + id       = (known after apply)
+      + name     = "deepresearch-demo"
+      + tags_all = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+
+      + setting (known after apply)
+    }
+
+  # module.ecs.aws_ecs_service.app will be created
+  + resource "aws_ecs_service" "app" {
+      + availability_zone_rebalancing      = "DISABLED"
+      + cluster                            = (known after apply)
+      + deployment_maximum_percent         = 200
+      + deployment_minimum_healthy_percent = 100
+      + desired_count                      = 1
+      + enable_ecs_managed_tags            = false
+      + enable_execute_command             = false
+      + iam_role                           = (known after apply)
+      + id                                 = (known after apply)
+      + launch_type                        = "FARGATE"
+      + name                               = "deepresearch-demo"
+      + platform_version                   = (known after apply)
+      + scheduling_strategy                = "REPLICA"
+      + tags_all                           = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + task_definition                    = (known after apply)
+      + triggers                           = (known after apply)
+      + wait_for_steady_state              = false
+
+      + load_balancer {
+          + container_name   = "app"
+          + container_port   = 8000
+          + target_group_arn = (known after apply)
+            # (1 unchanged attribute hidden)
+        }
+
+      + network_configuration {
+          + assign_public_ip = true
+          + security_groups  = (known after apply)
+          + subnets          = (known after apply)
+        }
+    }
+
+  # module.ecs.aws_ecs_task_definition.app will be created
+  + resource "aws_ecs_task_definition" "app" {
+      + arn                      = (known after apply)
+      + arn_without_revision     = (known after apply)
+      + container_definitions    = (known after apply)
+      + cpu                      = "512"
+      + enable_fault_injection   = (known after apply)
+      + execution_role_arn       = (known after apply)
+      + family                   = "deepresearch-demo"
+      + id                       = (known after apply)
+      + memory                   = "1024"
+      + network_mode             = "awsvpc"
+      + requires_compatibilities = [
+          + "FARGATE",
+        ]
+      + revision                 = (known after apply)
+      + skip_destroy             = false
+      + tags_all                 = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + task_role_arn            = (known after apply)
+      + track_latest             = false
+    }
+
+  # module.ecs.aws_security_group.tasks will be created
+  + resource "aws_security_group" "tasks" {
+      + arn                    = (known after apply)
+      + description            = "ECS tasks: app port from the ALB only. Postgres/Redis containers share the task ENI (localhost) and are never opened here - not reachable from anywhere but the app container."
+      + egress                 = [
+          + {
+              + cidr_blocks      = [
+                  + "0.0.0.0/0",
+                ]
+              + from_port        = 0
+              + ipv6_cidr_blocks = []
+              + prefix_list_ids  = []
+              + protocol         = "-1"
+              + security_groups  = []
+              + self             = false
+              + to_port          = 0
+                # (1 unchanged attribute hidden)
+            },
+        ]
+      + id                     = (known after apply)
+      + ingress                = [
+          + {
+              + cidr_blocks      = []
+              + from_port        = 8000
+              + ipv6_cidr_blocks = []
+              + prefix_list_ids  = []
+              + protocol         = "tcp"
+              + security_groups  = (known after apply)
+              + self             = false
+              + to_port          = 8000
+                # (1 unchanged attribute hidden)
+            },
+        ]
+      + name                   = "deepresearch-demo-tasks"
+      + name_prefix            = (known after apply)
+      + owner_id               = (known after apply)
+      + revoke_rules_on_delete = false
+      + tags_all               = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + vpc_id                 = (known after apply)
+    }
+
+  # module.iam.data.aws_iam_policy_document.execution_secrets[0] will be read during apply
+  # (config refers to values not yet known)
+ <= data "aws_iam_policy_document" "execution_secrets" {
+      + id            = (known after apply)
+      + json          = (known after apply)
+      + minified_json = (known after apply)
+
+      + statement {
+          + actions   = [
+              + "ssm:GetParameters",
+            ]
+          + resources = [
+              + (known after apply),
+              + (known after apply),
+              + (known after apply),
+              + (known after apply),
+              + (known after apply),
+              + (known after apply),
+            ]
+        }
+      + statement {
+          + actions   = [
+              + "kms:Decrypt",
+            ]
+          + resources = [
+              + "*",
+            ]
+
+          + condition {
+              + test     = "StringEquals"
+              + values   = [
+                  + "ssm.us-east-1.amazonaws.com",
+                ]
+              + variable = "kms:ViaService"
+            }
+        }
+    }
+
+  # module.iam.data.aws_iam_policy_document.task_permissions will be read during apply
+  # (config refers to values not yet known)
+ <= data "aws_iam_policy_document" "task_permissions" {
+      + id            = (known after apply)
+      + json          = (known after apply)
+      + minified_json = (known after apply)
+
+      + statement {
+          + actions   = [
+              + "ssm:GetParameter",
+              + "ssm:GetParameters",
+              + "ssm:GetParametersByPath",
+            ]
+          + resources = [
+              + "arn:aws:ssm:us-east-1:<REDACTED_ACCOUNT_ID>:parameter/deepresearch/demo/*",
+            ]
+          + sid       = "SSMReadOwnPathOnly"
+        }
+      + statement {
+          + actions   = [
+              + "logs:CreateLogStream",
+              + "logs:DescribeLogStreams",
+              + "logs:PutLogEvents",
+            ]
+          + resources = [
+              + (known after apply),
+            ]
+          + sid       = "CloudWatchLogsWriteOwnGroupOnly"
+        }
+      + statement {
+          + actions   = [
+              + "cloudwatch:PutMetricData",
+            ]
+          + resources = [
+              + "*",
+            ]
+          + sid       = "CloudWatchCustomMetricsOwnNamespaceOnly"
+
+          + condition {
+              + test     = "StringEquals"
+              + values   = [
+                  + "DeepResearch",
+                ]
+              + variable = "cloudwatch:namespace"
+            }
+        }
+    }
+
+  # module.iam.aws_iam_role.execution will be created
+  + resource "aws_iam_role" "execution" {
+      + arn                   = (known after apply)
+      + assume_role_policy    = jsonencode(
+            {
+              + Statement = [
+                  + {
+                      + Action    = "sts:AssumeRole"
+                      + Effect    = "Allow"
+                      + Principal = {
+                          + Service = "ecs-tasks.amazonaws.com"
+                        }
+                    },
+                ]
+              + Version   = "2012-10-17"
+            }
+        )
+      + create_date           = (known after apply)
+      + force_detach_policies = false
+      + id                    = (known after apply)
+      + managed_policy_arns   = (known after apply)
+      + max_session_duration  = 3600
+      + name                  = "deepresearch-demo-execution"
+      + name_prefix           = (known after apply)
+      + path                  = "/"
+      + tags_all              = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + unique_id             = (known after apply)
+
+      + inline_policy (known after apply)
+    }
+
+  # module.iam.aws_iam_role.task will be created
+  + resource "aws_iam_role" "task" {
+      + arn                   = (known after apply)
+      + assume_role_policy    = jsonencode(
+            {
+              + Statement = [
+                  + {
+                      + Action    = "sts:AssumeRole"
+                      + Effect    = "Allow"
+                      + Principal = {
+                          + Service = "ecs-tasks.amazonaws.com"
+                        }
+                    },
+                ]
+              + Version   = "2012-10-17"
+            }
+        )
+      + create_date           = (known after apply)
+      + force_detach_policies = false
+      + id                    = (known after apply)
+      + managed_policy_arns   = (known after apply)
+      + max_session_duration  = 3600
+      + name                  = "deepresearch-demo-task"
+      + name_prefix           = (known after apply)
+      + path                  = "/"
+      + tags_all              = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + unique_id             = (known after apply)
+
+      + inline_policy (known after apply)
+    }
+
+  # module.iam.aws_iam_role_policy.execution_secrets[0] will be created
+  + resource "aws_iam_role_policy" "execution_secrets" {
+      + id          = (known after apply)
+      + name        = "deepresearch-demo-execution-secrets"
+      + name_prefix = (known after apply)
+      + policy      = (known after apply)
+      + role        = (known after apply)
+    }
+
+  # module.iam.aws_iam_role_policy.task_permissions will be created
+  + resource "aws_iam_role_policy" "task_permissions" {
+      + id          = (known after apply)
+      + name        = "deepresearch-demo-task-permissions"
+      + name_prefix = (known after apply)
+      + policy      = (known after apply)
+      + role        = (known after apply)
+    }
+
+  # module.iam.aws_iam_role_policy_attachment.execution_managed will be created
+  + resource "aws_iam_role_policy_attachment" "execution_managed" {
+      + id         = (known after apply)
+      + policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+      + role       = "deepresearch-demo-execution"
+    }
+
+  # module.logs.aws_cloudwatch_log_group.app will be created
+  + resource "aws_cloudwatch_log_group" "app" {
+      + arn               = (known after apply)
+      + id                = (known after apply)
+      + log_group_class   = (known after apply)
+      + name              = "/ecs/deepresearch-demo"
+      + name_prefix       = (known after apply)
+      + retention_in_days = 14
+      + skip_destroy      = false
+      + tags_all          = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+    }
+
+  # module.networking.aws_internet_gateway.main will be created
+  + resource "aws_internet_gateway" "main" {
+      + arn      = (known after apply)
+      + id       = (known after apply)
+      + owner_id = (known after apply)
+      + tags     = {
+          + "Name" = "deepresearch-demo-igw"
+        }
+      + tags_all = {
+          + "Name"        = "deepresearch-demo-igw"
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + vpc_id   = (known after apply)
+    }
+
+  # module.networking.aws_route_table.public will be created
+  + resource "aws_route_table" "public" {
+      + arn              = (known after apply)
+      + id               = (known after apply)
+      + owner_id         = (known after apply)
+      + propagating_vgws = (known after apply)
+      + route            = [
+          + {
+              + cidr_block                 = "0.0.0.0/0"
+              + gateway_id                 = (known after apply)
+                # (11 unchanged attributes hidden)
+            },
+        ]
+      + tags             = {
+          + "Name" = "deepresearch-demo-public-rt"
+        }
+      + tags_all         = {
+          + "Name"        = "deepresearch-demo-public-rt"
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + vpc_id           = (known after apply)
+    }
+
+  # module.networking.aws_route_table_association.public[0] will be created
+  + resource "aws_route_table_association" "public" {
+      + id             = (known after apply)
+      + route_table_id = (known after apply)
+      + subnet_id      = (known after apply)
+    }
+
+  # module.networking.aws_route_table_association.public[1] will be created
+  + resource "aws_route_table_association" "public" {
+      + id             = (known after apply)
+      + route_table_id = (known after apply)
+      + subnet_id      = (known after apply)
+    }
+
+  # module.networking.aws_subnet.isolated[0] will be created
+  + resource "aws_subnet" "isolated" {
+      + arn                                            = (known after apply)
+      + assign_ipv6_address_on_creation                = false
+      + availability_zone                              = "us-east-1a"
+      + availability_zone_id                           = (known after apply)
+      + cidr_block                                     = "10.42.10.0/24"
+      + enable_dns64                                   = false
+      + enable_resource_name_dns_a_record_on_launch    = false
+      + enable_resource_name_dns_aaaa_record_on_launch = false
+      + id                                             = (known after apply)
+      + ipv6_cidr_block_association_id                 = (known after apply)
+      + ipv6_native                                    = false
+      + map_public_ip_on_launch                        = false
+      + owner_id                                       = (known after apply)
+      + private_dns_hostname_type_on_launch            = (known after apply)
+      + tags                                           = {
+          + "Name" = "deepresearch-demo-isolated-0"
+        }
+      + tags_all                                       = {
+          + "Name"        = "deepresearch-demo-isolated-0"
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + vpc_id                                         = (known after apply)
+    }
+
+  # module.networking.aws_subnet.isolated[1] will be created
+  + resource "aws_subnet" "isolated" {
+      + arn                                            = (known after apply)
+      + assign_ipv6_address_on_creation                = false
+      + availability_zone                              = "us-east-1b"
+      + availability_zone_id                           = (known after apply)
+      + cidr_block                                     = "10.42.11.0/24"
+      + enable_dns64                                   = false
+      + enable_resource_name_dns_a_record_on_launch    = false
+      + enable_resource_name_dns_aaaa_record_on_launch = false
+      + id                                             = (known after apply)
+      + ipv6_cidr_block_association_id                 = (known after apply)
+      + ipv6_native                                    = false
+      + map_public_ip_on_launch                        = false
+      + owner_id                                       = (known after apply)
+      + private_dns_hostname_type_on_launch            = (known after apply)
+      + tags                                           = {
+          + "Name" = "deepresearch-demo-isolated-1"
+        }
+      + tags_all                                       = {
+          + "Name"        = "deepresearch-demo-isolated-1"
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + vpc_id                                         = (known after apply)
+    }
+
+  # module.networking.aws_subnet.public[0] will be created
+  + resource "aws_subnet" "public" {
+      + arn                                            = (known after apply)
+      + assign_ipv6_address_on_creation                = false
+      + availability_zone                              = "us-east-1a"
+      + availability_zone_id                           = (known after apply)
+      + cidr_block                                     = "10.42.0.0/24"
+      + enable_dns64                                   = false
+      + enable_resource_name_dns_a_record_on_launch    = false
+      + enable_resource_name_dns_aaaa_record_on_launch = false
+      + id                                             = (known after apply)
+      + ipv6_cidr_block_association_id                 = (known after apply)
+      + ipv6_native                                    = false
+      + map_public_ip_on_launch                        = true
+      + owner_id                                       = (known after apply)
+      + private_dns_hostname_type_on_launch            = (known after apply)
+      + tags                                           = {
+          + "Name" = "deepresearch-demo-public-0"
+        }
+      + tags_all                                       = {
+          + "Name"        = "deepresearch-demo-public-0"
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + vpc_id                                         = (known after apply)
+    }
+
+  # module.networking.aws_subnet.public[1] will be created
+  + resource "aws_subnet" "public" {
+      + arn                                            = (known after apply)
+      + assign_ipv6_address_on_creation                = false
+      + availability_zone                              = "us-east-1b"
+      + availability_zone_id                           = (known after apply)
+      + cidr_block                                     = "10.42.1.0/24"
+      + enable_dns64                                   = false
+      + enable_resource_name_dns_a_record_on_launch    = false
+      + enable_resource_name_dns_aaaa_record_on_launch = false
+      + id                                             = (known after apply)
+      + ipv6_cidr_block_association_id                 = (known after apply)
+      + ipv6_native                                    = false
+      + map_public_ip_on_launch                        = true
+      + owner_id                                       = (known after apply)
+      + private_dns_hostname_type_on_launch            = (known after apply)
+      + tags                                           = {
+          + "Name" = "deepresearch-demo-public-1"
+        }
+      + tags_all                                       = {
+          + "Name"        = "deepresearch-demo-public-1"
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + vpc_id                                         = (known after apply)
+    }
+
+  # module.networking.aws_vpc.main will be created
+  + resource "aws_vpc" "main" {
+      + arn                                  = (known after apply)
+      + cidr_block                           = "10.42.0.0/16"
+      + default_network_acl_id               = (known after apply)
+      + default_route_table_id               = (known after apply)
+      + default_security_group_id            = (known after apply)
+      + dhcp_options_id                      = (known after apply)
+      + enable_dns_hostnames                 = true
+      + enable_dns_support                   = true
+      + enable_network_address_usage_metrics = (known after apply)
+      + id                                   = (known after apply)
+      + instance_tenancy                     = "default"
+      + ipv6_association_id                  = (known after apply)
+      + ipv6_cidr_block                      = (known after apply)
+      + ipv6_cidr_block_network_border_group = (known after apply)
+      + main_route_table_id                  = (known after apply)
+      + owner_id                             = (known after apply)
+      + tags                                 = {
+          + "Name" = "deepresearch-demo-vpc"
+        }
+      + tags_all                             = {
+          + "Name"        = "deepresearch-demo-vpc"
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+    }
+
+  # module.ssm_config.aws_ssm_parameter.secret["ANTHROPIC_API_KEY"] will be created
+  + resource "aws_ssm_parameter" "secret" {
+      + arn            = (known after apply)
+      + data_type      = (known after apply)
+      + has_value_wo   = (known after apply)
+      + id             = (known after apply)
+      + insecure_value = (known after apply)
+      + key_id         = (known after apply)
+      + name           = "/deepresearch/demo/ANTHROPIC_API_KEY"
+      + tags_all       = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + tier           = (known after apply)
+      + type           = "SecureString"
+      + value          = (sensitive value)
+      + value_wo       = (write-only attribute)
+      + version        = (known after apply)
+    }
+
+  # module.ssm_config.aws_ssm_parameter.secret["DATABASE_URL"] will be created
+  + resource "aws_ssm_parameter" "secret" {
+      + arn            = (known after apply)
+      + data_type      = (known after apply)
+      + has_value_wo   = (known after apply)
+      + id             = (known after apply)
+      + insecure_value = (known after apply)
+      + key_id         = (known after apply)
+      + name           = "/deepresearch/demo/DATABASE_URL"
+      + tags_all       = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + tier           = (known after apply)
+      + type           = "SecureString"
+      + value          = (sensitive value)
+      + value_wo       = (write-only attribute)
+      + version        = (known after apply)
+    }
+
+  # module.ssm_config.aws_ssm_parameter.secret["DEEPRESEARCH_API_KEY"] will be created
+  + resource "aws_ssm_parameter" "secret" {
+      + arn            = (known after apply)
+      + data_type      = (known after apply)
+      + has_value_wo   = (known after apply)
+      + id             = (known after apply)
+      + insecure_value = (known after apply)
+      + key_id         = (known after apply)
+      + name           = "/deepresearch/demo/DEEPRESEARCH_API_KEY"
+      + tags_all       = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + tier           = (known after apply)
+      + type           = "SecureString"
+      + value          = (sensitive value)
+      + value_wo       = (write-only attribute)
+      + version        = (known after apply)
+    }
+
+  # module.ssm_config.aws_ssm_parameter.secret["POSTGRES_PASSWORD"] will be created
+  + resource "aws_ssm_parameter" "secret" {
+      + arn            = (known after apply)
+      + data_type      = (known after apply)
+      + has_value_wo   = (known after apply)
+      + id             = (known after apply)
+      + insecure_value = (known after apply)
+      + key_id         = (known after apply)
+      + name           = "/deepresearch/demo/POSTGRES_PASSWORD"
+      + tags_all       = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + tier           = (known after apply)
+      + type           = "SecureString"
+      + value          = (sensitive value)
+      + value_wo       = (write-only attribute)
+      + version        = (known after apply)
+    }
+
+  # module.ssm_config.aws_ssm_parameter.secret["REDIS_URL"] will be created
+  + resource "aws_ssm_parameter" "secret" {
+      + arn            = (known after apply)
+      + data_type      = (known after apply)
+      + has_value_wo   = (known after apply)
+      + id             = (known after apply)
+      + insecure_value = (known after apply)
+      + key_id         = (known after apply)
+      + name           = "/deepresearch/demo/REDIS_URL"
+      + tags_all       = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + tier           = (known after apply)
+      + type           = "SecureString"
+      + value          = (sensitive value)
+      + value_wo       = (write-only attribute)
+      + version        = (known after apply)
+    }
+
+  # module.ssm_config.aws_ssm_parameter.secret["TAVILY_API_KEY"] will be created
+  + resource "aws_ssm_parameter" "secret" {
+      + arn            = (known after apply)
+      + data_type      = (known after apply)
+      + has_value_wo   = (known after apply)
+      + id             = (known after apply)
+      + insecure_value = (known after apply)
+      + key_id         = (known after apply)
+      + name           = "/deepresearch/demo/TAVILY_API_KEY"
+      + tags_all       = {
+          + "environment" = "demo"
+          + "managed_by"  = "terraform"
+          + "project"     = "deepresearch"
+        }
+      + tier           = (known after apply)
+      + type           = "SecureString"
+      + value          = (sensitive value)
+      + value_wo       = (write-only attribute)
+      + version        = (known after apply)
+    }
+
+Plan: 35 to add, 0 to change, 0 to destroy.
+
+Changes to Outputs:
+  + alb_url            = (known after apply)
+  + ecr_repository_url = (known after apply)
+  + ecs_cluster_name   = "deepresearch-demo"
+  + ecs_service_name   = "deepresearch-demo"
