@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (gitignored) and fill in real values before apply.
+# Never commit terraform.tfvars - it holds API keys and the demo auth key.
+
+aws_region  = "us-east-1"
+project     = "deepresearch"
+environment = "demo"
+
+budget_notification_email = "you@example.com"
+
+anthropic_api_key = ""
+tavily_api_key    = ""
+demo_api_key      = "" # shared header value for X-API-Key on the live /research endpoint
+
+# use_managed_data_layer = false  # RDS+ElastiCache instead of containers-in-task; see docs/DESIGN.md decision row 13
