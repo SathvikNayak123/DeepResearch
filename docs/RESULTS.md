@@ -981,3 +981,228 @@ so real per-request latency for a live query still favors the current default.
 enough to justify a repeated (3-5x) version of this same ablation as the next concrete step before
 actually flipping the default, not enough on its own to flip it today. Flagging for the user's call
 rather than changing `RunConfig.planning_style`'s default unilaterally.
+
+# Session 6: live streaming, thin UI, and a first real observability verification (2026-07-07)
+
+## Streaming API + thin UI
+
+Added `GET /research/stream` (SSE — GET, not POST, so the browser's native `EventSource` needs no
+custom client code) and `GET /runs/{run_id}` (`src/deepresearch/api/streaming.py`,
+`routes_runs.py`). `orchestrator.py`'s `run_research()` gained an optional `on_event` hook, fired
+inside `_call_stage` right after each stage's trajectory is recorded, plus one `run_started` event
+at the very top (before any DB/LLM work) so a live client sees the `run_id` — and therefore the
+Langfuse trace ID — from the first byte, not only at completion.
+
+A test written against this hook (`test_run_research_on_event_fires_for_every_stage`) initially
+failed: the "worker" stage never fired. Root cause was in my own edit, not pre-existing code — a
+`replace_all` edit meant to wire `on_event` into both worker call sites (the sequential ReAct-mode
+one and the parallel-pool `_bounded_worker` one) only matched one, because the two blocks have
+different indentation and `replace_all` only replaces literal string matches, not both semantically
+equivalent occurrences. Worth recording because it's exactly the kind of self-introduced bug a
+dedicated test catches immediately and a manual click-through wouldn't have.
+
+A second real bug surfaced by manual `curl` testing against a live server (not caught by the
+initial unit tests, since those never exercised the endpoint's own request-handling code): a bad
+`local_corpus_dir` in the `config` query param crashed with a raw 500 instead of a graceful
+`run_error` SSE event, because `RunConfig.from_overrides(...)` and `build_search_backend(...)` ran
+*before* `StreamingResponse` was constructed — any exception there propagated as an unhandled
+FastAPI error, never reaching the try/except inside the streaming generator. Fixed by moving both
+calls inside the generator itself, so every failure mode (malformed config JSON, a missing corpus
+file, an agent-side exception) degrades to the same `run_error` event. Regression-tested in
+`tests/test_streaming.py` (4 tests: bad-config, malformed-JSON, mocked-success-path event ordering,
+mocked-agent-exception) — the success-path test mocks `run_research` itself rather than hitting a
+real LLM, since this test is about the endpoint's own queue/SSE plumbing, not agent behavior
+(already covered separately in `test_orchestrator_persistence.py`).
+
+Thin UI at `/ui/` (`ui/index.html`, mounted via `StaticFiles` with a path resolved relative to
+`main.py`'s own file location, not `cwd` — works identically from a local dev shell, Docker's
+`/app`, or a test runner's directory, and `check_dir=False` so a deployment that never shipped
+`ui/` 404s on `/ui/*` instead of crashing the whole app at import time). Type a question, watch the
+trace populate stage-by-stage, read the cited report when `done` fires.
+
+**Verified against a real, running HTTP server** (not just FastAPI's `TestClient` ASGI transport):
+started `uvicorn` for real, `curl`'d the full SSE stream for a real question, confirmed correct
+event ordering across a real 3-round replan loop (`run_started` → `stage_complete`×N → `done`),
+confirmed `GET /runs/{run_id}` retrieves that exact run's 11 trajectory rows + 48 tool-call rows,
+and confirmed the `run_error` fix live (a bad corpus path now yields one `run_error` SSE frame,
+not a 500).
+
+## Observability verification: two previously-unverified claims, now confirmed real
+
+**Langfuse trace-by-`run_id`** (docs/DESIGN.md §6's own flagged open risk: *"OTel context/baggage
+propagation across truly concurrent async workers... verify it holds before relying on it
+architecturally"*) — queried Langfuse Cloud's public API directly (`GET /api/public/traces/{id}`)
+for the `run_id` from the live streaming test above. **Confirmed**: the trace's `id` field is
+exactly that `run_id`, with 18 real observations — `plan`, 6×`worker`, 6×`rerank` (nested under
+their respective worker spans), 3×`reflection` (matching the 3 real replan rounds), `synthesis`,
+and the root `run` span — every parent/child relationship intact. This is the first time this
+project has actually checked whether the claimed `run_id = trace_id` join works under real
+concurrent worker load rather than assuming it from the OTel SDK's documented behavior. It does.
+
+**Grafana cache-hit-rate dashboard against real traffic** — brought up `app` + `prometheus` +
+`grafana` via `docker compose up -d --build` (deliberately *not* the self-hosted Langfuse tier,
+since `.env` points `LANGFUSE_HOST` at Langfuse Cloud instead — no reason to run ClickHouse/MinIO
+locally for a service that's unused). Made two real live `POST /research` calls (real Tavily search
++ real OpenRouter LLM, the actual production path, not `local_corpus` — the Docker image
+deliberately doesn't ship `data/corpus/`, that's eval-only data, so a `local_corpus` config against
+the container 404s on the corpus file; confirmed live, not a bug, just the wrong test setup on my
+first attempt). Result: real cache hits (`fetch: 5 hits, 7 misses` from the two overlapping
+questions), Prometheus scraping `deepresearch-app: up`, and the dashboard's own literal panel
+queries confirmed against Prometheus's query API — the cumulative-count panel renders correctly
+immediately; the `rate(...[5m])`-based hit-rate-percentage panel returns `0` right after a two
+request burst, which is expected `rate()` behavior needing more than one scrape's worth of history
+to compute a meaningful per-second slope, not a broken panel. Not verified: sustained traffic over
+a longer window (which would need many more real API calls than this session's cost budget called
+for) — the mechanics are confirmed real, the multi-request behavior is a reasonable, not fully
+load-tested, extrapolation.
+
+## `eval-full` (100q FRAMES + 100q MuSiQue): complete
+
+Kicked off after the Session 5 chunk-cap fix made the ~2-2.5hr FRAMES-full estimate from the
+evals-as-a-system session plausible to actually run rather than defer again. Interrupted ~24
+questions into FRAMES by an unrelated Claude Code session restart (not a code bug — the harness
+process itself exited); restarted clean rather than building a custom resume script for ~$0.15 of
+sunk cost. Ran to completion on the second attempt with zero further crashes.
+
+```bash
+python -m eval.run_eval --mode full --database-url "$DATABASE_URL"
+```
+
+Full output: `results/eval_full_20260707T182512Z.json`.
+
+| Benchmark | n | Wall-clock | Task completion | Key metric(s) | Agent cost | Judge/extraction cost |
+|---|---|---|---|---|---|---|
+| FRAMES | 100 | 9264.5s (~2.57h) | 1.00 | accuracy 0.460, citation coverage 0.649, citation precision 0.785 | $0.617 | $0.0147 (371 calls, 13 cache hits) |
+| MuSiQue | 100 | 3894.4s (~1.08h) | 1.00 | `answer_f1` 0.056 (raw), **`answer_f1_extracted` 0.347**, `answer_contains_gold` 0.44 | $0.619 | $0.0034 (100 extraction calls) |
+
+Total real cost for the full 200-question suite: **~$1.25**. Zero exceptions, zero budget-ceiling
+hits across all 200 real questions — a meaningfully larger, more stable sample than the n=20 smoke
+baseline (`results/ci_baseline.json`), consistent with it directionally (smoke: `frames.accuracy`
+0.450 / `citation_precision` 0.904; full-100: 0.460 / 0.785 — accuracy holds up, citation precision
+comes in a bit lower at 4x the sample, a real signal worth more trust than the smaller run alone).
+
+**A cleanup mistake, disclosed rather than quietly fixed**: consolidating stray rows from the
+interrupted first attempt, a timestamp-boundary guess (misremembered as "07:36-08:50 UTC" instead
+of the actual "10:31-11:03 UTC") caused the delete filter to also catch the original Phase-1 clean
+20-question FRAMES smoke-baseline rows — the ones `results/ci_baseline.json` was computed from.
+**Nothing published or committed was affected**: `ci_baseline.json` is a static, already-frozen
+JSON snapshot (git-tracked), and this document's own write-up of that baseline is prose, not a live
+query — neither depends on the DB rows still existing. What's actually gone: the ability to
+re-query that specific historical batch's raw per-question `trajectories`/`tool_calls` from the
+local Postgres dev database (no backup existed; this was never pushed anywhere durable). Verified
+before deleting that `musique`'s equivalent old baseline rows were correctly excluded (they were,
+confirmed by exact post-delete row count) — the mistake was scoped to `frames` only. Recorded here
+in the same spirit as this document's other real mistakes (the reliability job's invalid run_id,
+the DRB flush-at-end-of-loop bug): the honest record includes what went wrong, not just what
+worked.
+
+### Reading this honestly
+
+- **`musique.answer_f1_extracted` (0.347) at n=100 is meaningfully lower than the n=20 backfilled
+  value (0.490) from the smoke baseline.** Both are real signal, not a regression — n=20 was always
+  a small, noisier sample; 0.347 at 5x the sample size is the more trustworthy number going
+  forward. This is exactly the kind of thing a larger real run is for.
+- **FRAMES wall-clock (2.57h for 100q, ~93s/question average) matches the post-chunk-cap-fix
+  smoke rate closely** (~101s/question at n=20) — confirms the fix's effect holds at scale, not
+  just on the small sample it was validated against.
+- **What this doesn't test**: no reliability/variance repeats at this n (CLAUDE.md's own rule
+  wasn't re-applied at the full-100 scale, only at n=20 earlier); this real baseline was not used to
+  re-tighten `ci_baseline.json`'s gated thresholds — that's a reasonable next step now that a larger
+  real sample exists, not done in this session.
+
+## DeepResearch Bench: real RACE + FACT-style scoring, minimal proof-of-mechanics (n=2)
+
+Replaced the `NotImplementedError` stub (docs/DESIGN.md decision row 11) with a real
+implementation, adapted from `Ayanami0730/deep_research_bench` (MIT), pinned commit
+`469cce54ea7f6a63c163d3d9fec879cf289ec484`. Two honest departures from the reference, both
+documented in the module docstring (`eval/benchmarks/deepresearch_bench.py`):
+
+- **RACE** is a faithful port: real per-task criteria (fetched + cached from the reference repo's
+  `criteria.jsonl`, each dimension pre-weighted), the real point-wise scoring prompt structure, and
+  the real weighted-aggregation math from their `utils/score_calculator.py` (`eval/race_judge.py`).
+  Judge model is this project's own configured `judge_model` (`google/gemini-2.5-flash-lite` via
+  OpenRouter), not the reference's GPT-5.5 — scores here are not comparable to the public
+  leaderboard, which is scored under one fixed evaluator.
+- **FACT** in the reference implementation extracts claim-URL pairs from free text and independently
+  re-scrapes each URL via Jina (a dependency this project has no key for) to verify support. This
+  agent already produces structured `claim -> source_id` citations against already-fetched content,
+  so this reuses the existing, already-tested `compute_citation_metrics` (FACT-protocol-style per
+  CLAUDE.md) instead of building a second, redundant re-scrape pipeline. Methodologically
+  equivalent in spirit, not a byte-exact FACT port, not leaderboard-comparable either.
+
+Ran against **live Tavily search** (`search_backend="tavily"`), not `LocalCorpusBackend` — DRB tasks
+are open-ended real-world research questions with no fixed corpus, unlike FRAMES/MuSiQue. Rerank
+was disabled for this run specifically (`DEEPRESEARCH_RERANK_ENABLED=false`), not as a permanent
+default — `eval-full`'s FRAMES-100 was running concurrently and is CPU-bound on the reranker;
+running DRB's own reranker calls at the same time would have reintroduced the exact cross-process
+CPU contention Session 5 fixed. This is a smaller quality tradeoff for a Tavily-backed run than for
+FRAMES specifically, since `candidate_pool_size == rerank_top_k == 6` makes it a no-op for
+*selection* either way, and Tavily's results already carry a relevance ranking (unlike FRAMES' raw
+local corpus, which has none).
+
+### Two real bugs found running this for the first time
+
+1. **Root-credentials-adjacent oversight, corrected before any cost**: my first launch attempt built
+   `RunConfig` with rerank left on, which would have contended with the concurrently-running
+   `eval-full`. Caught before any real cost was incurred and killed via the proper `TaskStop`
+   tool — a raw `kill -9` on a `ps`-matched PID was correctly blocked by this session's own
+   auto-mode safety classifier, since a PID found by pattern-matching isn't confirmed to be a
+   session-owned process. Re-launched with `DEEPRESEARCH_RERANK_ENABLED=false` instead.
+2. **The same "flush at the end of the loop" bug this project already fixed elsewhere, freshly
+   reintroduced in this new module.** `run_musique`/`run_frames` both flush `eval_scores` per
+   question specifically so a mid-loop crash can't discard already-computed, already-paid-for
+   scores (their own inline comments say so explicitly). My first `deepresearch_bench.py` draft
+   batched the flush to the end of the loop instead — and proved the point the hard way: a
+   **sustained** OpenRouter 429 (the same failure mode from the architecture ablation, but this
+   time outlasting even the hardened 5-attempt/~30s retry — confirmed reproducible, not a one-off)
+   crashed mid-loop on the second task, and task one's fully-computed RACE + citation scores
+   (already paid for) were silently lost — confirmed via a direct `eval_scores` row count of zero
+   immediately after the crash. Fixed by moving the flush inside the loop, matching the established
+   pattern. The already-completed agent runs weren't wasted: reconstructed a `RunResult` for each
+   from its stored `trajectories` rows (`synthesis` stage → `Report`, `worker` stage rows → the
+   exact `WorkerNotes` Pydantic objects, since that's literally how they were serialized in the
+   first place) and re-ran only the judge scoring against the recovered data — paying for judging
+   again, not for re-running two more rounds of live multi-hop web research.
+
+### Results (n=2, real EN tasks, live Tavily search, real judge scoring)
+
+| Task | Topic | RACE total | comprehensiveness | insight | instr. following | readability | citation coverage | citation precision |
+|---|---|---|---|---|---|---|---|---|
+| 76 | Health (gut microbiota) | 7.67 | 7.65 | 6.30 | 9.50 | 7.60 | 1.000 | 0.938 |
+| 74 | Education & Jobs (sports IDSS) | 2.83 | 2.70 | 1.90 | 3.95 | 3.85 | 0.733 | 1.000 |
+
+Real cost: **$0.038 total** ($0.0348 agent execution across both tasks + $0.0028 judge scoring) —
+dramatically below the reference implementation's $15-35-for-10-questions estimate, because this
+run uses cheap OpenRouter-routed models throughout rather than GPT-5.5/GPT-5.4-mini. Scaling
+linearly, a real 10-question weekly run would land near **$0.19**, not $15-35 — though this is one
+data point at n=2, not a stable per-task average, and task 74's much shorter report (1833 vs. 3819
+chars) suggests real per-task cost variance that a larger sample would characterize better.
+
+### Reading this honestly
+
+- **The RACE score spread (7.67 vs. 2.83) looks like real signal, not noise.** Task 74's report is
+  less than half the length of task 76's, and the low `insight`/`comprehensiveness` sub-scores
+  (1.90, 2.70) are consistent with a report that didn't dig as deep into its (more specialized,
+  "sports intelligent decision support system") topic — exactly the kind of differentiation RACE's
+  weighted-criteria design is meant to produce, not an artifact.
+- **Citation coverage/precision moved in opposite directions between the two tasks** (76: high
+  coverage/high precision; 74: lower coverage/perfect precision on what *was* cited) — a small,
+  real illustration of why this project tracks both metrics separately rather than collapsing them
+  into one number (docs/DESIGN.md decision row 6).
+- **n=2 is a mechanics proof, not a characterization of this agent's DRB-style report quality.**
+  Scaling to the real weekly-10 or monthly-100 subsets is the natural next step and needs no new
+  code — `--n` is already a free parameter — just more real cost and wall-clock time.
+- **What this doesn't test**: no repeated-run variance (CLAUDE.md's reliability rule wasn't applied
+  here, same gap as the architecture ablation); no comparison against the reference GPT-5.5/GPT-5.4-mini
+  judges to see how much judge-model choice shifts these scores; FACT-style citation checking
+  validates against this agent's own already-fetched content, not an independent re-scrape, so it
+  can't catch a case where the fetched content itself was stale or wrong at fetch time.
+
+### Reproducing
+
+```bash
+pip install -e ".[dev,eval]"
+python -m eval.benchmarks.deepresearch_bench --mode weekly --n 2 --confirm --database-url "$DATABASE_URL"
+# Real weekly-10 or monthly-100 runs: drop --n (defaults to 10/100 per --mode),
+# or pass --n directly for any custom size.
+```

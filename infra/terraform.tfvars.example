@@ -7,9 +7,14 @@ environment = "demo"
 
 budget_notification_email = "you@example.com"
 
-anthropic_api_key = ""
-tavily_api_key    = ""
-demo_api_key      = "" # shared header value for X-API-Key on the live /research endpoint
+anthropic_api_key  = ""
+openrouter_api_key = "" # default live path — see variables.tf's comment on why
+tavily_api_key     = ""
+demo_api_key       = "" # shared header value for X-API-Key on the live /research endpoint
+
+# deepresearch_llm_provider = "openrouter"  # or "anthropic" once credit is available
+# agent_model = "google/gemini-2.5-flash"
+# judge_model = "google/gemini-2.5-flash-lite"
 
 # use_managed_data_layer = false  # RDS+ElastiCache instead of containers-in-task; see docs/DESIGN.md decision row 13
 

@@ -7,6 +7,7 @@ COPY src ./src
 RUN pip install --no-cache-dir -e .
 
 COPY scripts ./scripts
+COPY ui ./ui
 
 EXPOSE 8000
 

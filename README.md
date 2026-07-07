@@ -52,6 +52,19 @@ Langfuse UI: http://localhost:3000 (create an account, then set
 keys, restart `app`). Each run's trace shares its `run_id` as the OTel trace
 ID — search Langfuse for it to see the full connected trace.
 
+### Live streaming demo (Session 6)
+
+`GET /research/stream?question=...` — SSE progress on a live run (`run_started`
+with the `run_id`, one `stage_complete` per plan/worker/reflection/synthesis
+stage as it finishes, then `done` with the full report, or `run_error`). GET,
+not POST, so the browser's native `EventSource` works with no client-side
+plumbing. A thin demo UI is served at http://localhost:8000/ui/ — type a
+question, watch the trace populate live, read the cited report when it lands.
+
+`GET /runs/{run_id}` — a run's stored `runs` row + full trajectory + tool-call
+history, the queryable counterpart to a live stream or a Langfuse trace by the
+same `run_id`.
+
 ## Test
 
 ```bash

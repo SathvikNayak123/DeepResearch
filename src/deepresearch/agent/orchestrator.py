@@ -5,6 +5,7 @@ import dataclasses
 import logging
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
 from deepresearch.agent import planner, react, reflection, synthesis, worker
@@ -29,6 +30,12 @@ from deepresearch.telemetry.otel_setup import current_span_id_hex, run_root_cont
 
 logger = logging.getLogger(__name__)
 
+# Fired after each stage's trajectory is recorded — the one hook the SSE
+# streaming endpoint (api/streaming.py) needs to surface live progress
+# without restructuring the (already tested) blocking stage-by-stage flow
+# below. None everywhere else (CLI, eval harness, benchmarks) — a no-op.
+OnEvent = Callable[[dict], Awaitable[None]]
+
 
 async def _call_stage(
     name: str,
@@ -39,6 +46,7 @@ async def _call_stage(
     stage: str,
     parent_span_id: str,
     input_summary: dict | None = None,
+    on_event: OnEvent | None = None,
     **attrs,
 ):
     start_dt = datetime.now(timezone.utc)
@@ -68,6 +76,18 @@ async def _call_stage(
         started_at=start_dt,
         ended_at=end_dt,
     )
+    if on_event is not None:
+        await on_event(
+            {
+                "type": "stage_complete",
+                "stage": stage,
+                "name": name,
+                "tokens_in": usage.input_tokens,
+                "tokens_out": usage.output_tokens,
+                "cost_usd": usage.cost_usd,
+                "latency_ms": latency_ms,
+            }
+        )
     return result
 
 
@@ -78,6 +98,7 @@ async def run_research(
     search_backend: SearchBackend,
     llm: LLMClient | None = None,
     benchmark_name: str | None = None,
+    on_event: OnEvent | None = None,
 ) -> RunResult:
     """Runs one research question end-to-end. Every call writes a `runs` row
     (plus trajectories/tool_calls) to config.database_url — "every agent run
@@ -90,6 +111,12 @@ async def run_research(
     root_ctx = run_root_context(run_id)
     recorder = RunRecorder(run_id=run_id)
     run_started = time.monotonic()
+
+    if on_event is not None:
+        # Fired before any DB/LLM work so a live stream can show run_id
+        # (Langfuse trace correlation, docs/DESIGN.md: run_id = trace_id)
+        # from the very first byte, not only once the run finishes.
+        await on_event({"type": "run_started", "run_id": run_id, "question": question})
 
     await db.ensure_schema(config.database_url)
     await db.create_run(
@@ -124,6 +151,7 @@ async def run_research(
                 stage="plan",
                 parent_span_id=run_span_id,
                 input_summary={"question": question},
+                on_event=on_event,
             )
 
         try:
@@ -149,6 +177,7 @@ async def run_research(
                         stage="react_step",
                         parent_span_id=run_span_id,
                         input_summary={"step": step, "n_notes": len(all_notes)},
+                        on_event=on_event,
                     )
                     if action["done"]:
                         break
@@ -170,6 +199,7 @@ async def run_research(
                         stage="worker",
                         parent_span_id=run_span_id,
                         input_summary={"sub_question": sub_question.question},
+                        on_event=on_event,
                         **{"worker.sub_question": sub_question.question},
                     )
                     all_notes.append(note)
@@ -198,6 +228,7 @@ async def run_research(
                                 stage="worker",
                                 parent_span_id=run_span_id,
                                 input_summary={"sub_question": sub_question.question},
+                                on_event=on_event,
                                 **{"worker.sub_question": sub_question.question},
                             )
 
@@ -217,6 +248,7 @@ async def run_research(
                             "question": question,
                             "plan": [sq.question for sq in current_plan.sub_questions],
                         },
+                        on_event=on_event,
                     )
                     reflections.append(reflection_result)
 
@@ -236,6 +268,7 @@ async def run_research(
                 stage="synthesis",
                 parent_span_id=run_span_id,
                 input_summary={"question": question},
+                on_event=on_event,
             )
             status = RunStatus.COMPLETED
 
@@ -253,6 +286,7 @@ async def run_research(
                         stage="synthesis",
                         parent_span_id=run_span_id,
                         input_summary={"question": question, "budget_exceeded": True},
+                        on_event=on_event,
                     )
                 except Exception:
                     report = None

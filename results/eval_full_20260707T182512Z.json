@@ -1,0 +1,42 @@
+{
+  "frames": {
+    "benchmark": "frames",
+    "n": 100,
+    "is_real_llm": true,
+    "wall_clock_seconds": 9264.527956899998,
+    "mean_accuracy": 0.46,
+    "mean_citation_coverage": 0.6494412624412624,
+    "mean_citation_precision": 0.7853690476190477,
+    "trajectory": {
+      "task_completion_rate": 1.0,
+      "tool_call_success_rate": 1.0,
+      "mean_steps_per_solved_task": 27.72,
+      "mean_tokens_per_solved_task": 10860.68,
+      "n_runs": 100
+    },
+    "total_agent_cost_usd": 0.6172082,
+    "judge_calls_made": 371,
+    "judge_cache_hits": 13,
+    "judge_actual_cost_usd": 0.0147496
+  },
+  "musique": {
+    "benchmark": "musique",
+    "n": 100,
+    "is_real_llm": true,
+    "wall_clock_seconds": 3894.435428500001,
+    "mean_answer_f1": 0.0556619492932977,
+    "mean_answer_contains_gold": 0.44,
+    "mean_answer_f1_extracted": 0.3466309523809524,
+    "trajectory": {
+      "task_completion_rate": 1.0,
+      "tool_call_success_rate": 1.0,
+      "mean_steps_per_solved_task": 47.68,
+      "mean_tokens_per_solved_task": 9703.54,
+      "n_runs": 100
+    },
+    "total_agent_cost_usd": 0.6189325999999999,
+    "extraction_calls_made": 100,
+    "extraction_cache_hits": 0,
+    "extraction_actual_cost_usd": 0.0033779
+  }
+}
