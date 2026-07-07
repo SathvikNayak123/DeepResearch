@@ -5,6 +5,14 @@ import subprocess
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from dotenv import load_dotenv
+
+# Every entrypoint (cli.py, api/main.py, eval/run_eval.py) imports RunConfig
+# from here, so loading .env once at import time covers all of them. Doesn't
+# override already-exported env vars (python-dotenv default), so CI/shell
+# exports still win over a stale .env.
+load_dotenv()
+
 
 @lru_cache(maxsize=1)
 def current_git_sha() -> str:

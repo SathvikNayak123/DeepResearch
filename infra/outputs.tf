@@ -14,3 +14,8 @@ output "ecs_cluster_name" {
 output "ecs_service_name" {
   value = module.ecs.service_name
 }
+
+output "github_deploy_role_arn" {
+  description = "Set as the GitHub Actions repo variable AWS_DEPLOY_ROLE_ARN (Settings → Secrets and variables → Actions → Variables). Empty when enable_github_oidc = false."
+  value       = var.enable_github_oidc ? module.github_oidc[0].deploy_role_arn : ""
+}

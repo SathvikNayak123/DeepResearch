@@ -12,3 +12,12 @@ tavily_api_key    = ""
 demo_api_key      = "" # shared header value for X-API-Key on the live /research endpoint
 
 # use_managed_data_layer = false  # RDS+ElastiCache instead of containers-in-task; see docs/DESIGN.md decision row 13
+
+# --- Keyless CD (GitHub Actions OIDC). Off by default; flip on to enable deploy.yml. ---
+# enable_github_oidc   = true
+# github_owner         = "SathvikNayak123"
+# github_repo          = "DeepResearch"
+# github_deploy_branch = "main"
+# If the account already has a GitHub OIDC provider (only one allowed per account):
+# create_github_oidc_provider       = false
+# existing_github_oidc_provider_arn = "arn:aws:iam::<acct>:oidc-provider/token.actions.githubusercontent.com"

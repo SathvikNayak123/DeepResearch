@@ -93,6 +93,44 @@ variable "anthropic_api_key" {
   default   = ""
 }
 
+# --- Keyless CD (GitHub Actions OIDC) ---
+
+variable "enable_github_oidc" {
+  description = "Create the GitHub OIDC provider + deploy role for keyless CD (.github/workflows/deploy.yml). Off by default so a plain apply needs no GitHub wiring."
+  type        = bool
+  default     = false
+}
+
+variable "github_owner" {
+  description = "GitHub org/user owning the repo allowed to deploy."
+  type        = string
+  default     = "SathvikNayak123"
+}
+
+variable "github_repo" {
+  description = "Repo name (without owner) allowed to deploy."
+  type        = string
+  default     = "DeepResearch"
+}
+
+variable "github_deploy_branch" {
+  description = "Only this branch's workflow runs may assume the deploy role."
+  type        = string
+  default     = "main"
+}
+
+variable "create_github_oidc_provider" {
+  description = "Create the account-level GitHub OIDC provider. Set false if the account already has one and pass existing_github_oidc_provider_arn."
+  type        = bool
+  default     = true
+}
+
+variable "existing_github_oidc_provider_arn" {
+  description = "ARN of a pre-existing GitHub OIDC provider (only when create_github_oidc_provider = false)."
+  type        = string
+  default     = ""
+}
+
 variable "tavily_api_key" {
   type      = string
   sensitive = true

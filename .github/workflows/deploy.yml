@@ -1,0 +1,143 @@
+name: Deploy (ECS Fargate, keyless OIDC)
+
+# Hands-free CD: on push to main, build → push → roll a new ECS deployment,
+# smoke-check the live ALB, and AUTO-ROLL-BACK to the previous task-definition
+# revision if the new one fails to stabilize or fails the health check.
+#
+# No long-lived AWS keys: credentials come from GitHub's OIDC token exchanged
+# for the scoped deploy role (infra/modules/github_oidc). Prereqs, one-time:
+#   1. terraform apply with enable_github_oidc = true
+#   2. set repo Actions VARIABLES (not secrets):
+#        AWS_DEPLOY_ROLE_ARN  = terraform output -raw github_deploy_role_arn
+#        ALB_URL              = terraform output -raw alb_url
+#   (AWS_REGION/ECR/cluster/service follow the project naming convention below.)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "eval/**"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # required to request the OIDC token
+  contents: read
+
+env:
+  ECR_REPOSITORY: deepresearch-demo
+  ECS_CLUSTER: deepresearch-demo
+  ECS_SERVICE: deepresearch-demo
+  CONTAINER_NAME: app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reads from repo Variables first (the right place - role ARN and
+      # region aren't sensitive), falling back to Secrets so this still
+      # works if they were set there instead.
+      - name: Resolve deploy config (vars, falling back to secrets)
+        id: cfg
+        run: |
+          echo "role_arn=${{ vars.AWS_DEPLOY_ROLE_ARN || secrets.AWS_DEPLOY_ROLE_ARN }}" >> "$GITHUB_OUTPUT"
+          echo "region=${{ vars.AWS_REGION || secrets.AWS_REGION || 'us-east-1' }}" >> "$GITHUB_OUTPUT"
+          echo "alb_url=${{ vars.ALB_URL || secrets.ALB_URL }}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC, no stored keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.cfg.outputs.role_arn }}
+          aws-region: ${{ steps.cfg.outputs.region }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image (tagged by commit SHA)
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA::12}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Capture current task definition (rollback target)
+        id: current
+        run: |
+          ROLLBACK_TD=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+            --query 'services[0].taskDefinition' --output text)
+          echo "Currently deployed task def: $ROLLBACK_TD"
+          echo "rollback_td=$ROLLBACK_TD" >> "$GITHUB_OUTPUT"
+
+      - name: Register new task definition revision with the new image
+        id: register
+        env:
+          NEW_IMAGE: ${{ steps.build.outputs.image }}
+          ROLLBACK_TD: ${{ steps.current.outputs.rollback_td }}
+        run: |
+          # Take the currently-deployed revision, swap only the app container's
+          # image, drop the read-only fields AWS won't accept on register.
+          aws ecs describe-task-definition --task-definition "$ROLLBACK_TD" \
+            --query 'taskDefinition' --output json > td.json
+          jq --arg IMG "$NEW_IMAGE" --arg NAME "$CONTAINER_NAME" '
+            .containerDefinitions |= map(if .name == $NAME then .image = $IMG else . end)
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                  .compatibilities, .registeredAt, .registeredBy)
+          ' td.json > new-td.json
+          NEW_TD=$(aws ecs register-task-definition \
+            --cli-input-json file://new-td.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "Registered: $NEW_TD"
+          echo "new_td=$NEW_TD" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy new revision
+        env:
+          NEW_TD: ${{ steps.register.outputs.new_td }}
+        run: |
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
+            --task-definition "$NEW_TD" --force-new-deployment >/dev/null
+
+      - name: Wait for stability + smoke test (health check)
+        id: smoke
+        continue-on-error: true
+        env:
+          ALB_URL: ${{ steps.cfg.outputs.alb_url }}
+        run: |
+          set +e
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+          STABLE=$?
+          if [ "$STABLE" -ne 0 ]; then
+            echo "Service did not reach steady state."; exit 1
+          fi
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${ALB_URL}/health")
+          echo "GET /health -> $CODE"
+          [ "$CODE" = "200" ]
+
+      - name: Auto-rollback on failed deploy
+        if: steps.smoke.outcome == 'failure'
+        env:
+          ROLLBACK_TD: ${{ steps.current.outputs.rollback_td }}
+        run: |
+          echo "::error::New revision failed to stabilize / health-check. Rolling back to $ROLLBACK_TD"
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
+            --task-definition "$ROLLBACK_TD" --force-new-deployment >/dev/null
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+          echo "Rolled back. Failing the job so the bad commit is visibly red."
+          exit 1
+
+      - name: Deploy succeeded
+        if: steps.smoke.outcome == 'success'
+        run: echo "Live and healthy at ${{ steps.cfg.outputs.alb_url }}"

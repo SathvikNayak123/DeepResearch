@@ -1,0 +1,18 @@
+{
+  "musique": {
+    "benchmark": "musique",
+    "n": 1,
+    "is_real_llm": true,
+    "wall_clock_seconds": 10.952978299999813,
+    "mean_answer_f1": 0.09523809523809525,
+    "mean_answer_contains_gold": 0.0,
+    "trajectory": {
+      "task_completion_rate": 1.0,
+      "tool_call_success_rate": 1.0,
+      "mean_steps_per_solved_task": 40.0,
+      "mean_tokens_per_solved_task": 9105.0,
+      "n_runs": 1
+    },
+    "total_agent_cost_usd": 0.006394499999999999
+  }
+}
