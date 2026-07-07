@@ -1,0 +1,38 @@
+{
+  "frames": {
+    "benchmark": "frames",
+    "n": 20,
+    "is_real_llm": true,
+    "wall_clock_seconds": 4787.0446197,
+    "mean_accuracy": 0.4,
+    "mean_citation_coverage": 0.6710317460317461,
+    "mean_citation_precision": 0.6883333333333332,
+    "trajectory": {
+      "task_completion_rate": 0.95,
+      "tool_call_success_rate": 1.0,
+      "mean_steps_per_solved_task": 23.31578947368421,
+      "mean_tokens_per_solved_task": 9310.631578947368,
+      "n_runs": 20
+    },
+    "total_agent_cost_usd": 0.1042206,
+    "judge_calls_made": 82,
+    "judge_cache_hits": 0,
+    "judge_actual_cost_usd": 0.0031678000000000014
+  },
+  "musique": {
+    "benchmark": "musique",
+    "n": 20,
+    "is_real_llm": true,
+    "wall_clock_seconds": 809.0356372999995,
+    "mean_answer_f1": 0.05853330301814802,
+    "mean_answer_contains_gold": 0.6,
+    "trajectory": {
+      "task_completion_rate": 1.0,
+      "tool_call_success_rate": 1.0,
+      "mean_steps_per_solved_task": 44.0,
+      "mean_tokens_per_solved_task": 8695.3,
+      "n_runs": 20
+    },
+    "total_agent_cost_usd": 0.1119744
+  }
+}

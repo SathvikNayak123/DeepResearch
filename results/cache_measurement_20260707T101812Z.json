@@ -1,0 +1,63 @@
+{
+  "config": {
+    "n_questions": 20,
+    "seed": 42,
+    "fetches_per_question": 3,
+    "search_cost_usd": 0.008,
+    "fetch_cost_usd": 0.0016,
+    "search_cache_ttl_seconds": 86400,
+    "fetch_cache_ttl_seconds": 604800,
+    "used_real_redis": false,
+    "backend": "FakeTavilyBackend (simulated latency, no live API calls)"
+  },
+  "passes": [
+    {
+      "name": "cold (empty cache)",
+      "n_questions": 20,
+      "wall_clock_seconds": 21.407047499998953,
+      "search_hits": 0,
+      "search_misses": 20,
+      "fetch_hits": 0,
+      "fetch_misses": 60,
+      "dollars_spent": 0.2559999999999998,
+      "dollars_saved": 0.0,
+      "hit_rate": 0.0
+    },
+    {
+      "name": "warm (same questions, repeated)",
+      "n_questions": 20,
+      "wall_clock_seconds": 0.011680800000249292,
+      "search_hits": 20,
+      "search_misses": 0,
+      "fetch_hits": 60,
+      "fetch_misses": 0,
+      "dollars_spent": 0.0,
+      "dollars_saved": 0.2559999999999998,
+      "hit_rate": 1.0
+    },
+    {
+      "name": "mixed (half repeat, half fresh)",
+      "n_questions": 20,
+      "wall_clock_seconds": 10.996517499999754,
+      "search_hits": 10,
+      "search_misses": 10,
+      "fetch_hits": 30,
+      "fetch_misses": 30,
+      "dollars_spent": 0.128,
+      "dollars_saved": 0.128,
+      "hit_rate": 0.5
+    },
+    {
+      "name": "bypass (cache_enabled=false)",
+      "n_questions": 20,
+      "wall_clock_seconds": 21.418707599999834,
+      "search_hits": 0,
+      "search_misses": 20,
+      "fetch_hits": 0,
+      "fetch_misses": 60,
+      "dollars_spent": 0.256,
+      "dollars_saved": 0.0,
+      "hit_rate": 0.0
+    }
+  ]
+}

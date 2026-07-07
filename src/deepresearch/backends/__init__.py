@@ -27,7 +27,14 @@ def build_search_backend(config: RunConfig) -> SearchBackend:
     from deepresearch.backends.cached import CachedSearchBackend
     from deepresearch.cache.redis_cache import RedisCache
 
-    client = redis_asyncio.from_url(config.redis_url, decode_responses=True)
+    # protocol=2 (RESP2): redis-py 8.x defaults to negotiating RESP3 via a
+    # HELLO command on connect, which redis:7-alpine (docker-compose's
+    # `redis` service) rejects with "unknown command 'HELLO'" - confirmed
+    # live, first real-Redis exercise of this path (prior sessions had no
+    # Docker daemon, so this default-cache_enabled=true path never actually
+    # ran against a real Redis until now). RedisCache only does get/set/ex -
+    # no RESP3-only feature is needed here.
+    client = redis_asyncio.from_url(config.redis_url, decode_responses=True, protocol=2)
     return CachedSearchBackend(
         inner,
         RedisCache(client),

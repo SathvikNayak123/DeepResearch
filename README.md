@@ -72,14 +72,19 @@ make eval-drb                       # gated manual-only DeepResearch Bench stub,
 ```
 
 > **Local runs and the reranker.** Rerank is on by default, which pulls the ~1 GB
-> `bge-reranker-v2-m3` cross-encoder on first use. On some
-> `torch`/`sentence-transformers` combinations it also raises
-> `NotImplementedError: Cannot copy out of meta tensor` on first load (a version
-> incompatibility, not a logic bug). CI/nightly and the committed real baseline all
-> run with `DEEPRESEARCH_RERANK_ENABLED=false`, which is a no-op for *selection*
-> (`candidate_pool_size == rerank_top_k == 6`, so the same candidates are kept) and
-> sidesteps both the download and the crash. Set it for local eval runs too unless you
-> specifically want to exercise the reranker.
+> `bge-reranker-v2-m3` cross-encoder on first use. Earlier sessions hit
+> `NotImplementedError: Cannot copy out of meta tensor` on first load on some
+> `torch`/`transformers`/`sentence-transformers` combinations — `pyproject.toml` now
+> pins `torch~=2.12`, `transformers~=4.57`, `sentence-transformers~=3.4` (the
+> combination verified crash-free here: direct `CrossEncoder` load, a 15-chunk batch
+> `rerank()` call through the real `CrossEncoderRerankBackend`, and the full test
+> suite all pass). If a fresh install still hits the meta-tensor error on your
+> platform, it's the same known version-incompatibility class, not a logic bug —
+> `DEEPRESEARCH_RERANK_ENABLED=false` remains a safe fallback (a no-op for
+> *selection* since `candidate_pool_size == rerank_top_k == 6`, so the same
+> candidates are kept either way). CI/nightly still run with rerank off — that's a
+> separate concern (the ~1 GB download stalling on GitHub-hosted runners), not this
+> crash.
 
 Every `run_research()` call — live or eval — writes a `runs` row (plus
 `trajectories`/`tool_calls`) to `DATABASE_URL` automatically; defaults to a

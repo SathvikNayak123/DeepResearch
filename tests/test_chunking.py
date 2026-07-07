@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from deepresearch.chunking import chunk_text
+from deepresearch.chunking import cap_chunks, chunk_text
 
 
 def test_empty_text_returns_no_chunks():
@@ -28,3 +28,29 @@ def test_overlap_shares_content_between_consecutive_chunks():
     first_tail = chunks[0][-100:]
     second_head = chunks[1][:100]
     assert first_tail == second_head
+
+
+def test_cap_chunks_is_noop_under_the_limit():
+    chunks = ["a", "b", "c"]
+    assert cap_chunks(chunks, 10) == chunks
+
+
+def test_cap_chunks_bounds_count_and_preserves_order():
+    chunks = [str(i) for i in range(30)]
+    capped = cap_chunks(chunks, 10)
+
+    assert len(capped) <= 10
+    assert capped == sorted(capped, key=int)  # ascending -> order preserved
+
+
+def test_cap_chunks_includes_first_and_last_for_coverage():
+    chunks = [str(i) for i in range(30)]
+    capped = cap_chunks(chunks, 10)
+
+    assert capped[0] == "0"
+    assert capped[-1] == "29"
+
+
+def test_cap_chunks_single_slot_keeps_first_chunk():
+    chunks = ["a", "b", "c"]
+    assert cap_chunks(chunks, 1) == ["a"]

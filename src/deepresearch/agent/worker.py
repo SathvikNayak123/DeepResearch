@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 
 from deepresearch.backends.base import SearchBackend
-from deepresearch.chunking import chunk_text
+from deepresearch.chunking import cap_chunks, chunk_text
 from deepresearch.config import RunConfig
 from deepresearch.llm.client import LLMClient, LLMUsage
 from deepresearch.prompts.loader import load_prompt
@@ -109,7 +109,7 @@ async def run_worker(
                 latency_ms=fetch_latency_ms,
             )
 
-        for chunk in chunk_text(content) or [content]:
+        for chunk in cap_chunks(chunk_text(content) or [content], config.max_chunks_per_source):
             candidates.append((source_id, result.title, chunk))
 
     with stage_span(
