@@ -640,3 +640,115 @@ to `FakeLLMClient`'s judge-RNG and F1-floor blind spots — named in the
 failure output on both benchmarks. PR #3 is left **open-then-closed,
 unmerged** as the retained evidence artifact per this session's brief; #1
 and #2 are left open for the user to merge at their discretion.
+
+# trace-replay dogfood: a real MuSiQue run, a real crash, and a real gap (2026-07-05)
+
+An external project, [trace-replay](https://github.com/SathvikNayak123/trace-replay) (deterministic
+agent-run replay, built on a sibling project ctx-capture's trace schema), used this repo as its v1
+dogfood case study — real `ANTHROPIC_API_KEY` set in `.env` for the occasion, 3 real MuSiQue
+questions run through `eval.run_eval` (not `FakeLLMClient` — the first non-zero-cost runs in this
+repo's history). Two findings, one dead end, all real:
+
+1. The self-hosted `bge-reranker-v2-m3` cross-encoder crashes deterministically on first use in
+   that environment (`NotImplementedError: Cannot copy out of meta tensor...` — a
+   `sentence-transformers`/`transformers`/`torch` version incompatibility, distinct from the
+   already-documented slow-download CI hang above). Confirmed reproducible by re-running the same
+   question in isolation.
+2. That crash turned out to be **structurally undebuggable via replay**, because
+   `RunRecorder` (`src/deepresearch/store/recorder.py`) is an in-memory batch accumulator flushed
+   only at the end of a successful run — a crash anywhere discards every trajectory/tool-call row
+   for that run, including stages that already completed. There was nothing to import for
+   trace-replay to resume from. A concrete, measured argument for instrumenting incrementally
+   (ctx-capture-style, per-step) rather than batching at the end, if per-step debuggability across
+   crashes matters here.
+3. A different, completed real run (the "Ratata" MuSiQue question) got its actual gold answer
+   right but synthesized an honest gap about a secondary entity's date of birth. trace-replay
+   resumed from the one worker stage that produced that gap, with a differently-phrased
+   sub-question, for $0.00995 against $0.084 for the full original pipeline — same null result,
+   independently confirmed against the raw corpus as a genuine coverage gap rather than a query
+   quality problem.
+
+Full writeup, real numbers, and the exact replay configuration:
+[trace-replay's `docs/CASE_STUDY.md`](https://github.com/SathvikNayak123/trace-replay/blob/main/docs/CASE_STUDY.md).
+Nothing in this repo's own code changed as a result — this section exists purely as the
+cross-link the case study asked for.
+
+# Real-model baseline: Gemini 2.5 Flash via OpenRouter (2026-07-05)
+
+The prior real-key attempt (trace-replay dogfood, above) used `claude-opus-4-8` and ran out of
+Anthropic credit after 3 questions; separately, a dedicated real-key `eval-smoke` attempt on
+`claude-opus-4-8` (see `docs/proof/real_agentic_trajectories.json`) ran out of credit at 18/20
+FRAMES questions with no aggregate score ever computed. This is the first **complete** n=20+n=20
+FRAMES+MuSiQue real-model run in this repo's history — no `FakeLLMClient`, no credit exhaustion.
+
+**Why a different model**: Anthropic credit was exhausted (confirmed via a live `400
+invalid_request_error: credit balance too low`) and AWS Bedrock was blocked by an AWS Marketplace
+payment/e-mandate issue on the account attempting it. `src/deepresearch/llm/client.py` already had
+a `DEEPRESEARCH_LLM_PROVIDER=bedrock` swap from earlier in this session; this run added a third
+path, `openrouter` (OpenAI-compatible chat-completions API — a genuinely different request/response
+shape from Anthropic's Messages API, not just a different bill for the same model), verified
+against OpenRouter's own docs before use. Model: `google/gemini-2.5-flash` for all four agent
+stages, `google/gemini-2.5-flash-lite` for the judge (FRAMES only — MuSiQue is scored by string-based
+Answer F1, no judge calls). Pricing verified live 2026-07: $0.30/$2.50 per MTok in/out for Flash,
+$0.10/$0.40 for Flash-Lite — both cheaper than `claude-haiku-4-5`'s $1/$5, let alone
+`claude-opus-4-8`'s $5/$25.
+
+**Config** (from the `runs` table, `git_sha f2a0a66775101afa96dd7a5199229d0fd4a68a0a`):
+```json
+{
+  "search_backend": "local_corpus",
+  "cache_enabled": false,
+  "rerank_enabled": false,
+  "max_workers": 4,
+  "coverage_threshold": 0.8,
+  "planner_model": "google/gemini-2.5-flash",
+  "worker_model": "google/gemini-2.5-flash",
+  "reflection_model": "google/gemini-2.5-flash",
+  "synthesis_model": "google/gemini-2.5-flash",
+  "judge_model": "google/gemini-2.5-flash-lite"
+}
+```
+Run store: a dedicated `sanity_check.db` (not `deepresearch.db`/`ci_baseline.json`) — kept
+separate deliberately, since a different model family isn't a like-for-like comparison against the
+committed FakeLLMClient baseline.
+
+## Results
+
+| Benchmark | n | accuracy / answer_f1 | citation coverage / precision | task_completion_rate | agent cost | judge cost | wall-clock |
+|---|---|---|---|---|---|---|---|
+| FRAMES | 20 | 0.35 | 0.483 / 0.515 | 1.00 | $0.115 | $0.0021 (51 judge calls, 0 cache hits) | 236s |
+| MuSiQue | 20 | 0.077 (answer_contains_gold 0.6) | — | 1.00 | $0.112 | — | 208s |
+
+Total real spend: **$0.229** for a complete 40-question run — confirmed against OpenRouter's own
+`/api/v1/key` usage counter (delta matched the sum of reported costs, modulo a small earlier
+1-question sanity probe run separately).
+
+## Reading this honestly
+
+- **FRAMES accuracy of 0.35 is real signal, not a regression.** The committed `ci_baseline.json`
+  entry of `frames.accuracy = 0.700` is `FakeLLMClient`'s judge returning `rng.random() < 0.7` —
+  disclosed elsewhere in this file as having zero dependence on actual content. This 0.35 is the
+  first real measurement either baseline has ever had; the two numbers are not comparable and
+  this run is **not** wired into the CI gate or `ci_baseline.json`.
+- **This is one model family at n=20, not a benchmark of "which model is best."** Gemini 2.5 Flash
+  is a fast/cheap tier, not Google's frontier model; no Claude-vs-Gemini accuracy comparison is
+  possible here since no Claude run ever completed at this n (see the credit-exhaustion history
+  above) — only cost and mechanics are directly comparable.
+- **task_completion_rate 1.00 on both confirms the pipeline is provider-agnostic in practice**,
+  not just in code: real decomposition, real worker/reflection/synthesis round-trips, real
+  structured-JSON-schema parsing, all through OpenRouter's OpenAI-compatible endpoint rather than
+  Anthropic's Messages API, with zero exceptions across 40 questions.
+- **What this doesn't test**: only one non-Claude model tried; no reliability-job repeats (variance
+  unknown) on this model/provider combination; FRAMES citation precision (0.515) hasn't been
+  spot-checked by hand against the underlying corpus the way the original rerank ablation's
+  supporting-paragraph positions were.
+
+## Reproducing
+
+```bash
+# .env: DEEPRESEARCH_LLM_PROVIDER=openrouter, OPENROUTER_API_KEY=..., and
+# DEEPRESEARCH_{PLANNER,WORKER,REFLECTION,SYNTHESIS,JUDGE}_MODEL set to
+# google/gemini-2.5-flash / google/gemini-2.5-flash-lite as above
+pip install -e ".[dev,eval]"
+python -m eval.run_eval --mode smoke --database-url "sqlite+aiosqlite:///./sanity_check.db"
+```

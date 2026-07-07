@@ -88,3 +88,54 @@ exits non-zero if it finds any — `terraform destroy` succeeding is not by
 itself proof nothing was left behind (a resource outside terraform's state,
 or a destroy that silently no-ops on one resource, wouldn't show up in its
 exit code).
+
+## Keyless CD (GitHub Actions OIDC)
+
+`.github/workflows/deploy.yml` builds, pushes, and rolls a new ECS deployment
+on every push to `main`, then smoke-checks the live ALB and **auto-rolls-back**
+to the previous task-definition revision if the new one fails to stabilize or
+fails `/health`. **No long-lived AWS keys exist anywhere** — GitHub mints a
+short-lived OIDC token per run and exchanges it for the scoped deploy role
+(`modules/github_oidc`), whose trust policy only accepts runs from *this repo
+on the configured branch* (the `sub` condition). Do **not** put
+`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` in GitHub secrets — OIDC replaces
+them; storing them would reintroduce exactly the long-lived key this design
+removes.
+
+One-time setup:
+
+1. Enable it in `terraform.tfvars`: `enable_github_oidc = true` (set
+   `create_github_oidc_provider = false` + `existing_github_oidc_provider_arn`
+   if the account already has a GitHub OIDC provider — only one is allowed per
+   account), then `terraform apply`.
+2. Set two **repo Actions *variables*** (Settings → Secrets and variables →
+   Actions → *Variables* tab, not *Secrets* — neither value is sensitive,
+   so Variables is the correct home): `AWS_DEPLOY_ROLE_ARN` and `ALB_URL`,
+   both from `terraform output` (see below). `deploy.yml` reads Variables
+   first and falls back to Secrets of the same name if you set them there
+   instead, so either works — but prefer Variables, since anything in
+   Secrets is treated (and masked in logs) as if it were sensitive, which
+   these two values aren't.
+   ```sh
+   terraform output -raw github_deploy_role_arn   # -> AWS_DEPLOY_ROLE_ARN
+   terraform output -raw alb_url                   # -> ALB_URL
+   ```
+   Both outputs only exist after a **full** `apply` of `infra/` (the ALB is
+   part of every apply, not something `enable_github_oidc` gates) — if
+   either command errors, run `terraform apply` first.
+3. Push to `main` (or run the workflow manually via the Actions tab —
+   `deploy.yml` has `workflow_dispatch` enabled) — the deploy is hands-free
+   from there.
+
+The deploy role is least-privilege: ECR push scoped to the one repo, ECS
+`UpdateService`/`DescribeServices` scoped to the one service, and `iam:PassRole`
+scoped to exactly the task's execution + task roles and only to
+`ecs-tasks.amazonaws.com`. The only `Resource: "*"` entries
+(`ecr:GetAuthorizationToken`, `ecs:RegisterTaskDefinition`/`DescribeTaskDefinition`)
+are AWS actions with no resource-level ARN support.
+
+To capture the two evidence artifacts the design calls for: a clean push to
+`main` gives you **one hands-free deploy** run; pushing a commit whose image
+fails `/health` (e.g. a bad `CMD`) gives you **one auto-rollback** run (job goes
+red, service returns to the prior revision) — link both run URLs in
+`docs/RESULTS.md`.

@@ -33,6 +33,12 @@ One command, one research question, one cited report:
 python -m deepresearch.cli "Which came first, the Eiffel Tower or the Statue of Liberty?"
 ```
 
+> **This live path needs real keys.** The CLI (and `POST /research`) call the real
+> Anthropic + Tavily APIs — there is **no fake-client fallback on the live path**, so a
+> keyless clean clone will fail here. For an offline, no-cost end-to-end run (frozen
+> corpus + `FakeLLMClient`), use the eval harness below (`python -m eval.run_eval
+> --mode smoke`) instead — that path *does* auto-fall-back with a loud banner.
+
 Or via the API:
 
 ```bash
@@ -64,6 +70,16 @@ make eval-full                      # ~100q each — FRAMES-full is slow, see do
 make eval-reliability                # 20q x 3 repeats -> variance + all-consistent rate
 make eval-drb                       # gated manual-only DeepResearch Bench stub, prints cost first
 ```
+
+> **Local runs and the reranker.** Rerank is on by default, which pulls the ~1 GB
+> `bge-reranker-v2-m3` cross-encoder on first use. On some
+> `torch`/`sentence-transformers` combinations it also raises
+> `NotImplementedError: Cannot copy out of meta tensor` on first load (a version
+> incompatibility, not a logic bug). CI/nightly and the committed real baseline all
+> run with `DEEPRESEARCH_RERANK_ENABLED=false`, which is a no-op for *selection*
+> (`candidate_pool_size == rerank_top_k == 6`, so the same candidates are kept) and
+> sidesteps both the download and the crash. Set it for local eval runs too unless you
+> specifically want to exercise the reranker.
 
 Every `run_research()` call — live or eval — writes a `runs` row (plus
 `trajectories`/`tool_calls`) to `DATABASE_URL` automatically; defaults to a

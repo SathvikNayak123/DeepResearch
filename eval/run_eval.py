@@ -109,14 +109,21 @@ async def run_musique(n: int, seed: int, *, database_url: str) -> dict:
         f1 = best_answer_f1(predicted, ex.gold_answers)
         contains_gold = float(any(gold_contained(predicted, g) for g in ex.gold_answers))
 
-        scores_rows.append(_score_row(result.run_id, "musique", ex.question_id, "answer_f1", f1))
-        scores_rows.append(_score_row(result.run_id, "musique", ex.question_id, "answer_contains_gold", contains_gold))
+        question_scores = [
+            _score_row(result.run_id, "musique", ex.question_id, "answer_f1", f1),
+            _score_row(result.run_id, "musique", ex.question_id, "answer_contains_gold", contains_gold),
+        ]
+        # Flushed per-question, not batched to the end of the loop: a crash on
+        # question k (a downstream API error, a budget blowout) must not discard
+        # the k-1 questions' already-computed scores — same failure mode already
+        # documented for RunRecorder's end-of-run trajectory flush, one layer up.
+        await db.bulk_insert_eval_scores(database_url, question_scores)
+        scores_rows.extend(question_scores)
 
         tool_calls_by_run[result.run_id] = await db.get_tool_calls_for_run(database_url, result.run_id)
 
     elapsed = time.monotonic() - start
     traj = compute_trajectory_metrics(results, tool_calls_by_run)
-    await db.bulk_insert_eval_scores(database_url, scores_rows)
 
     return {
         "benchmark": "musique",
@@ -165,26 +172,28 @@ async def run_frames(n: int, seed: int, *, database_url: str) -> dict:
         )
         citation = await compute_citation_metrics(result, judge)
 
-        scores_rows.append(
+        question_scores = [
             _score_row(
                 result.run_id, "frames", ex.example_id, "accuracy", float(correct),
                 judge_model=judge_config.judge_model, rubric_version=judge_config.judge_rubric_version,
                 raw_judge_output={"rationale": rationale},
-            )
-        )
-        scores_rows.append(_score_row(result.run_id, "frames", ex.example_id, "citation_coverage", citation.coverage))
-        scores_rows.append(
+            ),
+            _score_row(result.run_id, "frames", ex.example_id, "citation_coverage", citation.coverage),
             _score_row(
                 result.run_id, "frames", ex.example_id, "citation_precision", citation.precision,
                 judge_model=judge_config.judge_model, rubric_version=judge_config.judge_rubric_version,
-            )
-        )
+            ),
+        ]
+        # Flushed per-question — see run_musique's identical comment: a crash
+        # partway through the loop (budget blowout, an API error) must not
+        # discard scores already computed for the questions before it.
+        await db.bulk_insert_eval_scores(database_url, question_scores)
+        scores_rows.extend(question_scores)
 
         tool_calls_by_run[result.run_id] = await db.get_tool_calls_for_run(database_url, result.run_id)
 
     elapsed = time.monotonic() - start
     traj = compute_trajectory_metrics(results, tool_calls_by_run)
-    await db.bulk_insert_eval_scores(database_url, scores_rows)
 
     return {
         "benchmark": "frames",

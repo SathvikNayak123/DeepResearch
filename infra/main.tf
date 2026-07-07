@@ -121,6 +121,28 @@ module "data_managed" {
   db_password             = random_password.postgres.result
 }
 
+# Keyless CD: GitHub Actions assumes this role via OIDC (no AWS keys in
+# GitHub secrets). Trust scoped to this repo + branch only. Off by default so
+# a plain `apply` needs no GitHub wiring; flip enable_github_oidc = true.
+module "github_oidc" {
+  count       = var.enable_github_oidc ? 1 : 0
+  source      = "./modules/github_oidc"
+  project     = var.project
+  environment = var.environment
+
+  github_owner               = var.github_owner
+  github_repo                = var.github_repo
+  github_branch              = var.github_deploy_branch
+  create_oidc_provider       = var.create_github_oidc_provider
+  existing_oidc_provider_arn = var.existing_github_oidc_provider_arn
+
+  ecr_repository_arn = module.ecr.repository_arn
+  ecs_cluster_name   = module.ecs.cluster_name
+  ecs_service_name   = module.ecs.service_name
+  execution_role_arn = module.iam.execution_role_arn
+  task_role_arn      = module.iam.task_role_arn
+}
+
 module "budget" {
   source             = "./modules/budget"
   project            = var.project

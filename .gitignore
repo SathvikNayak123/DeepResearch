@@ -26,3 +26,12 @@ data/corpus/*
 # Claude Code local tooling config/skills — not part of the project deliverable,
 # and settings.local.json specifically is meant to be per-machine, not shared.
 .claude/
+
+# Terraform: state/plan binaries and real secrets never belong in git.
+# docs/proof/plan.txt is a redacted *text* export, committed deliberately.
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/terraform.tfvars
+infra/tfplan
+infra/*.tfplan

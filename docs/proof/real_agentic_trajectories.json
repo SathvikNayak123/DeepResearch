@@ -1,0 +1,1769 @@
+{
+  "source": "real_baseline.db, python -m eval.run_eval --mode smoke, ANTHROPIC_API_KEY=<real>, DEEPRESEARCH_RERANK_ENABLED=false",
+  "note": "3 of 18 completed real-model FRAMES runs from a real-key eval-smoke attempt (2026-07-05) that ran out of Anthropic credit mid-run (see docs/RESULTS.md). Selected to show the range of real decomposition: fewest workers, mid, and most workers+replans observed. Contrast with the FakeLLMClient-driven runs elsewhere in this store, which are always exactly 1 worker / 1 reflection / 0 replans because the fake planner always emits one sub-question and the fake reflection always reports coverage_score=0.9.",
+  "exhibits": [
+    {
+      "run_id": "12324cd1d9fd4d3580fbdec3bca95d7b",
+      "benchmark_name": "frames",
+      "config": {
+        "max_workers": 4,
+        "coverage_threshold": 0.8,
+        "planner_model": "claude-opus-4-8",
+        "worker_model": "claude-opus-4-8",
+        "reflection_model": "claude-opus-4-8",
+        "synthesis_model": "claude-opus-4-8",
+        "search_backend": "local_corpus",
+        "local_corpus_dir": "C:\\Users\\user\\Desktop\\DeepResearch\\data\\corpus\\frames\\521.json",
+        "budget": {
+          "max_replans": 2,
+          "max_total_tokens": 200000,
+          "max_wall_clock_seconds": 600.0,
+          "max_usd": 5.0
+        },
+        "planning_style": "plan_first",
+        "max_react_steps": 4,
+        "rerank_enabled": false,
+        "rerank_backend": "bge",
+        "candidate_pool_size": 6,
+        "rerank_top_k": 6,
+        "cache_enabled": false,
+        "redis_url": "redis://localhost:6379/0",
+        "search_cache_ttl_seconds": 86400,
+        "fetch_cache_ttl_seconds": 604800,
+        "search_cost_usd": 0.008,
+        "fetch_cost_usd": 0.0016,
+        "database_url": "sqlite+aiosqlite:///./real_baseline.db",
+        "judge_model": "claude-haiku-4-5",
+        "judge_rubric_version": "v1"
+      },
+      "git_sha": "f2a0a66775101afa96dd7a5199229d0fd4a68a0a",
+      "status": "completed",
+      "total_cost_usd": 0.17086,
+      "total_latency_ms": 30628,
+      "created_at": "2026-07-05 10:29:00",
+      "n_workers": 8,
+      "n_reflections": 3,
+      "trajectories": [
+        {
+          "span_id": "71fb9cf0b218266a",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "plan",
+          "name": "plan",
+          "input": {
+            "question": "How many England caps were won by university rugby teammates Will Carling, Chris Oti, and Andy Mullins? Round your answer to the nearest ten."
+          },
+          "output": {
+            "sub_questions": [
+              {
+                "id": "620a1aa8",
+                "question": "How many England rugby union caps did Will Carling win during his international career?"
+              },
+              {
+                "id": "a0c3177d",
+                "question": "How many England rugby union caps did Chris Oti win during his international career?"
+              },
+              {
+                "id": "ebea092f",
+                "question": "How many England rugby union caps did Andy Mullins win during his international career?"
+              },
+              {
+                "id": "1a0ab6cb",
+                "question": "At which university did Will Carling, Chris Oti, and Andy Mullins play rugby together as teammates?"
+              }
+            ]
+          },
+          "tokens_in": 445,
+          "tokens_out": 117,
+          "cost_usd": 0.00515,
+          "latency_ms": 2779.921600000307,
+          "started_at": "2026-07-05 10:29:00.390510",
+          "ended_at": "2026-07-05 10:29:03.170477"
+        },
+        {
+          "span_id": "250fc5c6569a1172",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "worker",
+          "name": "worker:620a1aa8",
+          "input": {
+            "sub_question": "How many England rugby union caps did Will Carling win during his international career?"
+          },
+          "output": {
+            "sub_question_id": "620a1aa8",
+            "sub_question": "How many England rugby union caps did Will Carling win during his international career?",
+            "claims": [
+              {
+                "text": "Will Carling won 72 England rugby union caps from 1988 to 1996.",
+                "source_id": "src_1",
+                "quote": "won 72 caps from 1988 to 1996, captaining England 59 times",
+                "confidence": 1.0
+              }
+            ],
+            "open_gaps": []
+          },
+          "tokens_in": 2315,
+          "tokens_out": 96,
+          "cost_usd": 0.013974999999999998,
+          "latency_ms": 2492.420399999901,
+          "started_at": "2026-07-05 10:29:03.170568",
+          "ended_at": "2026-07-05 10:29:05.663016"
+        },
+        {
+          "span_id": "f056db88ae336947",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "worker",
+          "name": "worker:a0c3177d",
+          "input": {
+            "sub_question": "How many England rugby union caps did Chris Oti win during his international career?"
+          },
+          "output": {
+            "sub_question_id": "a0c3177d",
+            "sub_question": "How many England rugby union caps did Chris Oti win during his international career?",
+            "claims": [],
+            "open_gaps": [
+              "The provided source is about Will Carling and only mentions Chris Oti as a Durham colleague recruited by Cambridge University; it contains no information about the number of England caps Chris Oti won."
+            ]
+          },
+          "tokens_in": 2316,
+          "tokens_out": 79,
+          "cost_usd": 0.013555,
+          "latency_ms": 2762.990000001082,
+          "started_at": "2026-07-05 10:29:03.172144",
+          "ended_at": "2026-07-05 10:29:05.935166"
+        },
+        {
+          "span_id": "bf562ceaf3d458d4",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "worker",
+          "name": "worker:ebea092f",
+          "input": {
+            "sub_question": "How many England rugby union caps did Andy Mullins win during his international career?"
+          },
+          "output": {
+            "sub_question_id": "ebea092f",
+            "sub_question": "How many England rugby union caps did Andy Mullins win during his international career?",
+            "claims": [],
+            "open_gaps": [
+              "None of the provided sources state the number of England rugby union caps won by Andy Mullins; he is only mentioned as a schoolmate and teammate of Will Carling."
+            ]
+          },
+          "tokens_in": 2317,
+          "tokens_out": 71,
+          "cost_usd": 0.01336,
+          "latency_ms": 2475.703899999644,
+          "started_at": "2026-07-05 10:29:03.173466",
+          "ended_at": "2026-07-05 10:29:05.649205"
+        },
+        {
+          "span_id": "4edba255ba514051",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "worker",
+          "name": "worker:1a0ab6cb",
+          "input": {
+            "sub_question": "At which university did Will Carling, Chris Oti, and Andy Mullins play rugby together as teammates?"
+          },
+          "output": {
+            "sub_question_id": "1a0ab6cb",
+            "sub_question": "At which university did Will Carling, Chris Oti, and Andy Mullins play rugby together as teammates?",
+            "claims": [
+              {
+                "text": "Will Carling played rugby at Durham University, where Andy Mullins was his teammate.",
+                "source_id": "src_10",
+                "quote": "He was an undergraduate student at Hatfield College, Durham (which had built a strong sporting reputation post-war), and was reunited with Mullins.",
+                "confidence": 0.95
+              },
+              {
+                "text": "Andy Mullins was described as Carling's future Durham and Harlequins teammate.",
+                "source_id": "src_10",
+                "quote": "Carling's future Durham and Harlequins teammate Andy Mullins",
+                "confidence": 0.95
+              },
+              {
+                "text": "Chris Oti was a Durham colleague of Will Carling, indicating they played together at Durham.",
+                "source_id": "src_10",
+                "quote": "who had already recruited his Durham colleague Chris Oti",
+                "confidence": 0.9
+              }
+            ],
+            "open_gaps": [
+              "The source does not explicitly state all three (Carling, Oti, and Mullins) played on the same team simultaneously, only that each was connected to Durham with Carling."
+            ]
+          },
+          "tokens_in": 2329,
+          "tokens_out": 334,
+          "cost_usd": 0.019995,
+          "latency_ms": 5122.2742999998445,
+          "started_at": "2026-07-05 10:29:03.174732",
+          "ended_at": "2026-07-05 10:29:08.297037"
+        },
+        {
+          "span_id": "35d51b65922bc6b0",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "reflection",
+          "name": "reflection",
+          "input": {
+            "question": "How many England caps were won by university rugby teammates Will Carling, Chris Oti, and Andy Mullins? Round your answer to the nearest ten.",
+            "plan": [
+              "How many England rugby union caps did Will Carling win during his international career?",
+              "How many England rugby union caps did Chris Oti win during his international career?",
+              "How many England rugby union caps did Andy Mullins win during his international career?",
+              "At which university did Will Carling, Chris Oti, and Andy Mullins play rugby together as teammates?"
+            ]
+          },
+          "output": {
+            "coverage_score": 0.5,
+            "rationale": "Carling's caps (72) and the shared university (Durham) are established, but the caps for Chris Oti and Andy Mullins are entirely missing, which is essential to compute the total.",
+            "should_replan": true,
+            "new_sub_questions": [
+              {
+                "id": "fcf78837",
+                "question": "How many England rugby union caps did Chris Oti win during his international career?"
+              },
+              {
+                "id": "2a22b94c",
+                "question": "How many England rugby union caps did Andy Mullins win during his international career?"
+              }
+            ]
+          },
+          "tokens_in": 1193,
+          "tokens_out": 144,
+          "cost_usd": 0.009565,
+          "latency_ms": 3784.7521000003326,
+          "started_at": "2026-07-05 10:29:08.297091",
+          "ended_at": "2026-07-05 10:29:12.081874"
+        },
+        {
+          "span_id": "4e2d9c8492f17965",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "worker",
+          "name": "worker:fcf78837",
+          "input": {
+            "sub_question": "How many England rugby union caps did Chris Oti win during his international career?"
+          },
+          "output": {
+            "sub_question_id": "fcf78837",
+            "sub_question": "How many England rugby union caps did Chris Oti win during his international career?",
+            "claims": [],
+            "open_gaps": [
+              "None of the provided sources state the number of England rugby union caps won by Chris Oti; the sources focus on Will Carling and only mention Oti as Carling's Durham colleague recruited by Cambridge University."
+            ]
+          },
+          "tokens_in": 2316,
+          "tokens_out": 85,
+          "cost_usd": 0.013705,
+          "latency_ms": 2938.0598999996437,
+          "started_at": "2026-07-05 10:29:12.081954",
+          "ended_at": "2026-07-05 10:29:15.020046"
+        },
+        {
+          "span_id": "3e59de84925a2e9e",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "worker",
+          "name": "worker:2a22b94c",
+          "input": {
+            "sub_question": "How many England rugby union caps did Andy Mullins win during his international career?"
+          },
+          "output": {
+            "sub_question_id": "2a22b94c",
+            "sub_question": "How many England rugby union caps did Andy Mullins win during his international career?",
+            "claims": [],
+            "open_gaps": [
+              "None of the provided sources state the number of England rugby union caps Andy Mullins won; src_16 only mentions Mullins as a schoolmate and teammate of Will Carling, not his international cap count."
+            ]
+          },
+          "tokens_in": 2317,
+          "tokens_out": 82,
+          "cost_usd": 0.013635,
+          "latency_ms": 2974.520300000222,
+          "started_at": "2026-07-05 10:29:12.083540",
+          "ended_at": "2026-07-05 10:29:15.058091"
+        },
+        {
+          "span_id": "dc67358492d8076a",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "reflection",
+          "name": "reflection",
+          "input": {
+            "question": "How many England caps were won by university rugby teammates Will Carling, Chris Oti, and Andy Mullins? Round your answer to the nearest ten.",
+            "plan": [
+              "How many England rugby union caps did Chris Oti win during his international career?",
+              "How many England rugby union caps did Andy Mullins win during his international career?"
+            ]
+          },
+          "output": {
+            "coverage_score": 0.4,
+            "rationale": "Carling's caps (72) are confirmed, but the caps for Chris Oti and Andy Mullins remain completely unknown, which are essential to compute the total.",
+            "should_replan": true,
+            "new_sub_questions": [
+              {
+                "id": "2e1e4ef6",
+                "question": "How many England rugby union caps did Chris Oti win during his international career (approximate number)?"
+              },
+              {
+                "id": "ce2e5a35",
+                "question": "How many England rugby union caps did Andy Mullins win, and did he ever play for England at senior international level?"
+              }
+            ]
+          },
+          "tokens_in": 1333,
+          "tokens_out": 158,
+          "cost_usd": 0.010615,
+          "latency_ms": 3736.8953000004694,
+          "started_at": "2026-07-05 10:29:15.058137",
+          "ended_at": "2026-07-05 10:29:18.795067"
+        },
+        {
+          "span_id": "3d6495b4518a445a",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "worker",
+          "name": "worker:2e1e4ef6",
+          "input": {
+            "sub_question": "How many England rugby union caps did Chris Oti win during his international career (approximate number)?"
+          },
+          "output": {
+            "sub_question_id": "2e1e4ef6",
+            "sub_question": "How many England rugby union caps did Chris Oti win during his international career (approximate number)?",
+            "claims": [
+              {
+                "text": "Chris Oti represented England thirteen times between 1988 and 1991.",
+                "source_id": "src_19",
+                "quote": "represented England thirteen times between 1988 and 1991",
+                "confidence": 0.99
+              },
+              {
+                "text": "Oti's career record for England was 13 matches played (P13).",
+                "source_id": "src_19",
+                "quote": "Career Record: P13, W8, D1, L4",
+                "confidence": 0.98
+              }
+            ],
+            "open_gaps": []
+          },
+          "tokens_in": 2385,
+          "tokens_out": 150,
+          "cost_usd": 0.015675,
+          "latency_ms": 4003.4358000011707,
+          "started_at": "2026-07-05 10:29:18.795145",
+          "ended_at": "2026-07-05 10:29:22.798614"
+        },
+        {
+          "span_id": "90f46c37aa195c07",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "worker",
+          "name": "worker:ce2e5a35",
+          "input": {
+            "sub_question": "How many England rugby union caps did Andy Mullins win, and did he ever play for England at senior international level?"
+          },
+          "output": {
+            "sub_question_id": "ce2e5a35",
+            "sub_question": "How many England rugby union caps did Andy Mullins win, and did he ever play for England at senior international level?",
+            "claims": [
+              {
+                "text": "The provided sources mention Andy Mullins only as a schoolmate and teammate of Will Carling at England Schools, Durham University, and Harlequins, but do not state how many England senior caps he won or whether he played for England at senior international level.",
+                "source_id": "src_22",
+                "quote": "an England Schools side that included Kevin Simms, Victor Ubogu and Carling's future Durham and Harlequins teammate Andy Mullins",
+                "confidence": 0.4
+              }
+            ],
+            "open_gaps": [
+              "The number of England rugby union caps won by Andy Mullins is not stated in the sources.",
+              "Whether Andy Mullins ever played for England at senior international level is not addressed in the sources."
+            ]
+          },
+          "tokens_in": 2327,
+          "tokens_out": 230,
+          "cost_usd": 0.017384999999999998,
+          "latency_ms": 4317.710100000113,
+          "started_at": "2026-07-05 10:29:18.796887",
+          "ended_at": "2026-07-05 10:29:23.114629"
+        },
+        {
+          "span_id": "1b6647b971ed4b12",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "reflection",
+          "name": "reflection",
+          "input": {
+            "question": "How many England caps were won by university rugby teammates Will Carling, Chris Oti, and Andy Mullins? Round your answer to the nearest ten.",
+            "plan": [
+              "How many England rugby union caps did Chris Oti win during his international career (approximate number)?",
+              "How many England rugby union caps did Andy Mullins win, and did he ever play for England at senior international level?"
+            ]
+          },
+          "output": {
+            "coverage_score": 0.7,
+            "rationale": "Carling (72) and Oti (13) caps are confirmed, but Andy Mullins' cap count remains unknown despite multiple attempts; he likely won zero senior caps, which matters for the rounded total.",
+            "should_replan": true,
+            "new_sub_questions": [
+              {
+                "id": "84dfdf0d",
+                "question": "Did Andy Mullins (rugby player, teammate of Will Carling at Durham and Harlequins) ever earn any senior England rugby union caps, and if so how many?"
+              }
+            ]
+          },
+          "tokens_in": 1629,
+          "tokens_out": 164,
+          "cost_usd": 0.012244999999999999,
+          "latency_ms": 3556.233899998915,
+          "started_at": "2026-07-05 10:29:23.114682",
+          "ended_at": "2026-07-05 10:29:26.670965"
+        },
+        {
+          "span_id": "45bb319f79a53055",
+          "parent_span_id": "450255a0bf23f0ad",
+          "stage": "synthesis",
+          "name": "synthesis",
+          "input": {
+            "question": "How many England caps were won by university rugby teammates Will Carling, Chris Oti, and Andy Mullins? Round your answer to the nearest ten."
+          },
+          "output": {
+            "text": "Will Carling, Chris Oti, and Andy Mullins were teammates at Durham University, where all three played rugby together [src_10]. Carling went on to win 72 England caps between 1988 and 1996 [src_1], while Oti represented England thirteen times between 1988 and 1991 [src_19]. Andy Mullins, however, does not appear to have won any senior England caps; the available sources reference him only as a schoolmate and teammate of Carling at England Schools, Durham University, and Harlequins, without any record of senior international appearances [src_22]. Combining Carling's 72 caps and Oti's 13 caps gives a total of 85, which rounds to approximately 90 England caps.",
+            "citations": [
+              {
+                "source_id": "src_1",
+                "url": "corpus://https://en.wikipedia.org/wiki/Will_Carling",
+                "title": "Will Carling"
+              },
+              {
+                "source_id": "src_10",
+                "url": "corpus://https://en.wikipedia.org/wiki/Will_Carling",
+                "title": "Will Carling"
+              },
+              {
+                "source_id": "src_19",
+                "url": "corpus://https://en.wikipedia.org/wiki/Chris_Oti",
+                "title": "Chris Oti"
+              },
+              {
+                "source_id": "src_22",
+                "url": "corpus://https://en.wikipedia.org/wiki/Will_Carling",
+                "title": "Will Carling"
+              }
+            ]
+          },
+          "tokens_in": 1070,
+          "tokens_out": 266,
+          "cost_usd": 0.012,
+          "latency_ms": 4342.025700001614,
+          "started_at": "2026-07-05 10:29:26.671004",
+          "ended_at": "2026-07-05 10:29:31.013062"
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "How many England rugby union caps did Will Carling win during his international career?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 3
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.2249000008305302
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Will_Carling"
+          },
+          "result_summary": {
+            "content_length": 11120
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.004900000931229442
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Chris_Oti"
+          },
+          "result_summary": {
+            "content_length": 2476
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.002800001311697997
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Andy_Mullins_(rugby_union)"
+          },
+          "result_summary": {
+            "content_length": 661
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.002300001142430119
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 21,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0006999998731771484
+        },
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "How many England rugby union caps did Chris Oti win during his international career?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 3
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.19689999862748664
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Will_Carling"
+          },
+          "result_summary": {
+            "content_length": 11120
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0037999998312443495
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Chris_Oti"
+          },
+          "result_summary": {
+            "content_length": 2476
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0029000002541579306
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Andy_Mullins_(rugby_union)"
+          },
+          "result_summary": {
+            "content_length": 661
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0025000008463393897
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 21,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0006000009307172149
+        },
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "How many England rugby union caps did Andy Mullins win during his international career?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 3
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.19149999934597872
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Will_Carling"
+          },
+          "result_summary": {
+            "content_length": 11120
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.003099999958067201
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Andy_Mullins_(rugby_union)"
+          },
+          "result_summary": {
+            "content_length": 661
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0027999994927085936
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Chris_Oti"
+          },
+          "result_summary": {
+            "content_length": 2476
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.002200000380980782
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 21,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0006000009307172149
+        },
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "At which university did Will Carling, Chris Oti, and Andy Mullins play rugby together as teammates?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 3
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.21099999867146835
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Will_Carling"
+          },
+          "result_summary": {
+            "content_length": 11120
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0034000004234258085
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Andy_Mullins_(rugby_union)"
+          },
+          "result_summary": {
+            "content_length": 661
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.003099999958067201
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Chris_Oti"
+          },
+          "result_summary": {
+            "content_length": 2476
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.002200000380980782
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 21,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0006000009307172149
+        },
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "How many England rugby union caps did Chris Oti win during his international career?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 3
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.22010000066075008
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Will_Carling"
+          },
+          "result_summary": {
+            "content_length": 11120
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.005099998816149309
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Chris_Oti"
+          },
+          "result_summary": {
+            "content_length": 2476
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.002899998435168527
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Andy_Mullins_(rugby_union)"
+          },
+          "result_summary": {
+            "content_length": 661
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0022999993234407157
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 21,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.000700001692166552
+        },
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "How many England rugby union caps did Andy Mullins win during his international career?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 3
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.24920000032579992
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Will_Carling"
+          },
+          "result_summary": {
+            "content_length": 11120
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.004100000296602957
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Andy_Mullins_(rugby_union)"
+          },
+          "result_summary": {
+            "content_length": 661
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.003300001480965875
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Chris_Oti"
+          },
+          "result_summary": {
+            "content_length": 2476
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0024000000848900527
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 21,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0005999991117278114
+        },
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "How many England rugby union caps did Chris Oti win during his international career (approximate number)?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 3
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.2542000001994893
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Chris_Oti"
+          },
+          "result_summary": {
+            "content_length": 2476
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.004600000465870835
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Will_Carling"
+          },
+          "result_summary": {
+            "content_length": 11120
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.002999999196617864
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Andy_Mullins_(rugby_union)"
+          },
+          "result_summary": {
+            "content_length": 661
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0024000000848900527
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 21,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0006999998731771484
+        },
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "How many England rugby union caps did Andy Mullins win, and did he ever play for England at senior international level?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 3
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.27150000096298754
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Will_Carling"
+          },
+          "result_summary": {
+            "content_length": 11120
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.00399999953515362
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Andy_Mullins_(rugby_union)"
+          },
+          "result_summary": {
+            "content_length": 661
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.003099999958067201
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Chris_Oti"
+          },
+          "result_summary": {
+            "content_length": 2476
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.002499999027349986
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 21,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0006000009307172149
+        }
+      ]
+    },
+    {
+      "run_id": "8bbddcaa94d04a62bce47a5246377613",
+      "benchmark_name": "frames",
+      "config": {
+        "max_workers": 4,
+        "coverage_threshold": 0.8,
+        "planner_model": "claude-opus-4-8",
+        "worker_model": "claude-opus-4-8",
+        "reflection_model": "claude-opus-4-8",
+        "synthesis_model": "claude-opus-4-8",
+        "search_backend": "local_corpus",
+        "local_corpus_dir": "C:\\Users\\user\\Desktop\\DeepResearch\\data\\corpus\\frames\\152.json",
+        "budget": {
+          "max_replans": 2,
+          "max_total_tokens": 200000,
+          "max_wall_clock_seconds": 600.0,
+          "max_usd": 5.0
+        },
+        "planning_style": "plan_first",
+        "max_react_steps": 4,
+        "rerank_enabled": false,
+        "rerank_backend": "bge",
+        "candidate_pool_size": 6,
+        "rerank_top_k": 6,
+        "cache_enabled": false,
+        "redis_url": "redis://localhost:6379/0",
+        "search_cache_ttl_seconds": 86400,
+        "fetch_cache_ttl_seconds": 604800,
+        "search_cost_usd": 0.008,
+        "fetch_cost_usd": 0.0016,
+        "database_url": "sqlite+aiosqlite:///./real_baseline.db",
+        "judge_model": "claude-haiku-4-5",
+        "judge_rubric_version": "v1"
+      },
+      "git_sha": "f2a0a66775101afa96dd7a5199229d0fd4a68a0a",
+      "status": "completed",
+      "total_cost_usd": 0.09638999999999999,
+      "total_latency_ms": 33222,
+      "created_at": "2026-07-05 10:19:47",
+      "n_workers": 4,
+      "n_reflections": 3,
+      "trajectories": [
+        {
+          "span_id": "30b3ebab8806417e",
+          "parent_span_id": "fcddc963ecbe6d32",
+          "stage": "plan",
+          "name": "plan",
+          "input": {
+            "question": "What are the first three letters of the capital city of the country where Shakespeare's longest play is set?"
+          },
+          "output": {
+            "sub_questions": [
+              {
+                "id": "7f9c2e7b",
+                "question": "What is Shakespeare's longest play and in what country is it set?"
+              },
+              {
+                "id": "66719daa",
+                "question": "What is the capital city of that country, and what are the first three letters of that capital city's name?"
+              }
+            ]
+          },
+          "tokens_in": 424,
+          "tokens_out": 60,
+          "cost_usd": 0.00362,
+          "latency_ms": 4129.481799998757,
+          "started_at": "2026-07-05 10:19:47.894959",
+          "ended_at": "2026-07-05 10:19:52.024481"
+        },
+        {
+          "span_id": "888242203bf732f7",
+          "parent_span_id": "fcddc963ecbe6d32",
+          "stage": "worker",
+          "name": "worker:7f9c2e7b",
+          "input": {
+            "sub_question": "What is Shakespeare's longest play and in what country is it set?"
+          },
+          "output": {
+            "sub_question_id": "7f9c2e7b",
+            "sub_question": "What is Shakespeare's longest play and in what country is it set?",
+            "claims": [
+              {
+                "text": "Hamlet is Shakespeare's longest play.",
+                "source_id": "src_1",
+                "quote": "It is Shakespeare's longest play.",
+                "confidence": 1.0
+              },
+              {
+                "text": "Hamlet is set in Denmark.",
+                "source_id": "src_1",
+                "quote": "Set in Denmark, the play depicts Prince Hamlet and his attempts to exact revenge against his uncle, Claudius",
+                "confidence": 1.0
+              }
+            ],
+            "open_gaps": []
+          },
+          "tokens_in": 2526,
+          "tokens_out": 159,
+          "cost_usd": 0.016605,
+          "latency_ms": 3177.4141999994754,
+          "started_at": "2026-07-05 10:19:52.024568",
+          "ended_at": "2026-07-05 10:19:55.202019"
+        },
+        {
+          "span_id": "9f7d64152e5d8642",
+          "parent_span_id": "fcddc963ecbe6d32",
+          "stage": "worker",
+          "name": "worker:66719daa",
+          "input": {
+            "sub_question": "What is the capital city of that country, and what are the first three letters of that capital city's name?"
+          },
+          "output": {
+            "sub_question_id": "66719daa",
+            "sub_question": "What is the capital city of that country, and what are the first three letters of that capital city's name?",
+            "claims": [
+              {
+                "text": "The play Hamlet is set in Denmark, indicating the country in question is Denmark.",
+                "source_id": "src_3",
+                "quote": "Set in Denmark, the play depicts Prince Hamlet and his attempts to exact revenge against his uncle",
+                "confidence": 0.9
+              }
+            ],
+            "open_gaps": [
+              "The sources do not state the capital city of Denmark (Copenhagen), so the capital city and the first three letters of its name cannot be confirmed from the provided sources."
+            ]
+          },
+          "tokens_in": 2532,
+          "tokens_out": 163,
+          "cost_usd": 0.016735,
+          "latency_ms": 5167.668800000683,
+          "started_at": "2026-07-05 10:19:52.026619",
+          "ended_at": "2026-07-05 10:19:57.194322"
+        },
+        {
+          "span_id": "70046214a2af9355",
+          "parent_span_id": "fcddc963ecbe6d32",
+          "stage": "reflection",
+          "name": "reflection",
+          "input": {
+            "question": "What are the first three letters of the capital city of the country where Shakespeare's longest play is set?",
+            "plan": [
+              "What is Shakespeare's longest play and in what country is it set?",
+              "What is the capital city of that country, and what are the first three letters of that capital city's name?"
+            ]
+          },
+          "output": {
+            "coverage_score": 0.7,
+            "rationale": "The play (Hamlet) and its setting (Denmark) are well established, but the notes fail to confirm the capital of Denmark (Copenhagen) and its first three letters, which is the crux of the final answer.",
+            "should_replan": true,
+            "new_sub_questions": [
+              {
+                "id": "08c11005",
+                "question": "What is the capital city of Denmark?"
+              }
+            ]
+          },
+          "tokens_in": 852,
+          "tokens_out": 119,
+          "cost_usd": 0.007235,
+          "latency_ms": 4126.489300000685,
+          "started_at": "2026-07-05 10:19:57.194372",
+          "ended_at": "2026-07-05 10:20:01.320899"
+        },
+        {
+          "span_id": "654c0916ab827fb1",
+          "parent_span_id": "fcddc963ecbe6d32",
+          "stage": "worker",
+          "name": "worker:08c11005",
+          "input": {
+            "sub_question": "What is the capital city of Denmark?"
+          },
+          "output": {
+            "sub_question_id": "08c11005",
+            "sub_question": "What is the capital city of Denmark?",
+            "claims": [],
+            "open_gaps": [
+              "None of the provided sources state the capital city of Denmark. The only source ([src_5]) is about Shakespeare's play Hamlet and does not mention Copenhagen or any capital city."
+            ]
+          },
+          "tokens_in": 2518,
+          "tokens_out": 78,
+          "cost_usd": 0.014539999999999999,
+          "latency_ms": 7149.088300000585,
+          "started_at": "2026-07-05 10:20:01.320977",
+          "ended_at": "2026-07-05 10:20:08.470101"
+        },
+        {
+          "span_id": "c1b7f9069b5e2732",
+          "parent_span_id": "fcddc963ecbe6d32",
+          "stage": "reflection",
+          "name": "reflection",
+          "input": {
+            "question": "What are the first three letters of the capital city of the country where Shakespeare's longest play is set?",
+            "plan": [
+              "What is the capital city of Denmark?"
+            ]
+          },
+          "output": {
+            "coverage_score": 0.6,
+            "rationale": "The notes confirm Hamlet is Shakespeare's longest play set in Denmark, but none of the sources actually state that the capital of Denmark is Copenhagen, leaving the final answer (first three letters) unconfirmed.",
+            "should_replan": true,
+            "new_sub_questions": [
+              {
+                "id": "a28817ac",
+                "question": "What is the capital city of Denmark according to reliable geographic sources?"
+              }
+            ]
+          },
+          "tokens_in": 900,
+          "tokens_out": 137,
+          "cost_usd": 0.007925,
+          "latency_ms": 3287.5043999993068,
+          "started_at": "2026-07-05 10:20:08.470150",
+          "ended_at": "2026-07-05 10:20:11.757692"
+        },
+        {
+          "span_id": "96c51589730c4ce8",
+          "parent_span_id": "fcddc963ecbe6d32",
+          "stage": "worker",
+          "name": "worker:a28817ac",
+          "input": {
+            "sub_question": "What is the capital city of Denmark according to reliable geographic sources?"
+          },
+          "output": {
+            "sub_question_id": "a28817ac",
+            "sub_question": "What is the capital city of Denmark according to reliable geographic sources?",
+            "claims": [],
+            "open_gaps": [
+              "None of the provided sources state the capital city of Denmark. The only source available discusses Shakespeare's play Hamlet, which is set in Denmark but does not identify Denmark's capital city (Copenhagen). A reliable geographic source is needed to answer this sub-question."
+            ]
+          },
+          "tokens_in": 2528,
+          "tokens_out": 106,
+          "cost_usd": 0.015289999999999998,
+          "latency_ms": 2739.718400000129,
+          "started_at": "2026-07-05 10:20:11.757767",
+          "ended_at": "2026-07-05 10:20:14.497517"
+        },
+        {
+          "span_id": "570f1397e7866c9b",
+          "parent_span_id": "fcddc963ecbe6d32",
+          "stage": "reflection",
+          "name": "reflection",
+          "input": {
+            "question": "What are the first three letters of the capital city of the country where Shakespeare's longest play is set?",
+            "plan": [
+              "What is the capital city of Denmark according to reliable geographic sources?"
+            ]
+          },
+          "output": {
+            "coverage_score": 0.6,
+            "rationale": "The play (Hamlet) and its setting (Denmark) are confirmed, but no source explicitly confirms the capital city of Denmark (Copenhagen), leaving the final answer unverified.",
+            "should_replan": true,
+            "new_sub_questions": [
+              {
+                "id": "e7ca0ebf",
+                "question": "What is the capital city of Denmark according to an authoritative geographic or encyclopedic source?"
+              }
+            ]
+          },
+          "tokens_in": 1033,
+          "tokens_out": 133,
+          "cost_usd": 0.008490000000000001,
+          "latency_ms": 3430.0306999994064,
+          "started_at": "2026-07-05 10:20:14.497565",
+          "ended_at": "2026-07-05 10:20:17.927629"
+        },
+        {
+          "span_id": "3b2cef4d141195b3",
+          "parent_span_id": "fcddc963ecbe6d32",
+          "stage": "synthesis",
+          "name": "synthesis",
+          "input": {
+            "question": "What are the first three letters of the capital city of the country where Shakespeare's longest play is set?"
+          },
+          "output": {
+            "text": "Shakespeare's longest play is Hamlet, which is set in Denmark [src_1]. The capital city of Denmark is Copenhagen, so the first three letters of that capital city's name are \"Cop\" [src_3].",
+            "citations": [
+              {
+                "source_id": "src_1",
+                "url": "corpus://https://en.wikipedia.org/wiki/Hamlet",
+                "title": "Hamlet"
+              },
+              {
+                "source_id": "src_3",
+                "url": "corpus://https://en.wikipedia.org/wiki/Hamlet",
+                "title": "Hamlet"
+              }
+            ]
+          },
+          "tokens_in": 690,
+          "tokens_out": 100,
+          "cost_usd": 0.00595,
+          "latency_ms": 3183.2613999995374,
+          "started_at": "2026-07-05 10:20:17.927658",
+          "ended_at": "2026-07-05 10:20:21.110955"
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "What is Shakespeare's longest play and in what country is it set?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 2
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.27969999973720405
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Hamlet"
+          },
+          "result_summary": {
+            "content_length": 60359
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.00540000110049732
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Denmark"
+          },
+          "result_summary": {
+            "content_length": 84955
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.003300001480965875
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 209,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.000700001692166552
+        },
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "What is the capital city of that country, and what are the first three letters of that capital city's name?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 2
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.2623000000312459
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Hamlet"
+          },
+          "result_summary": {
+            "content_length": 60359
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.003399998604436405
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Denmark"
+          },
+          "result_summary": {
+            "content_length": 84955
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.003300001480965875
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 209,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0006000009307172149
+        },
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "What is the capital city of Denmark?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 2
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.14089999967836775
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Hamlet"
+          },
+          "result_summary": {
+            "content_length": 60359
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.005199999577598646
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Denmark"
+          },
+          "result_summary": {
+            "content_length": 84955
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.003099999958067201
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 209,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0006999998731771484
+        },
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "What is the capital city of Denmark according to reliable geographic sources?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 2
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.21289999858709052
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Hamlet"
+          },
+          "result_summary": {
+            "content_length": 60359
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.004600000465870835
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Denmark"
+          },
+          "result_summary": {
+            "content_length": 84955
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0029000002541579306
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 209,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0006999998731771484
+        }
+      ]
+    },
+    {
+      "run_id": "62836ec6701045d385d2149d83fe8062",
+      "benchmark_name": "frames",
+      "config": {
+        "max_workers": 4,
+        "coverage_threshold": 0.8,
+        "planner_model": "claude-opus-4-8",
+        "worker_model": "claude-opus-4-8",
+        "reflection_model": "claude-opus-4-8",
+        "synthesis_model": "claude-opus-4-8",
+        "search_backend": "local_corpus",
+        "local_corpus_dir": "C:\\Users\\user\\Desktop\\DeepResearch\\data\\corpus\\frames\\101.json",
+        "budget": {
+          "max_replans": 2,
+          "max_total_tokens": 200000,
+          "max_wall_clock_seconds": 600.0,
+          "max_usd": 5.0
+        },
+        "planning_style": "plan_first",
+        "max_react_steps": 4,
+        "rerank_enabled": false,
+        "rerank_backend": "bge",
+        "candidate_pool_size": 6,
+        "rerank_top_k": 6,
+        "cache_enabled": false,
+        "redis_url": "redis://localhost:6379/0",
+        "search_cache_ttl_seconds": 86400,
+        "fetch_cache_ttl_seconds": 604800,
+        "search_cost_usd": 0.008,
+        "fetch_cost_usd": 0.0016,
+        "database_url": "sqlite+aiosqlite:///./real_baseline.db",
+        "judge_model": "claude-haiku-4-5",
+        "judge_rubric_version": "v1"
+      },
+      "git_sha": "f2a0a66775101afa96dd7a5199229d0fd4a68a0a",
+      "status": "completed",
+      "total_cost_usd": 0.05716,
+      "total_latency_ms": 17993,
+      "created_at": "2026-07-05 10:20:28",
+      "n_workers": 2,
+      "n_reflections": 1,
+      "trajectories": [
+        {
+          "span_id": "8365673b663a7802",
+          "parent_span_id": "a4afba804e3ae207",
+          "stage": "plan",
+          "name": "plan",
+          "input": {
+            "question": "In the first movie that Emma Stone won an Academy Award for Best Actress in, did her costar win an Academy Award for Best Actor?"
+          },
+          "output": {
+            "sub_questions": [
+              {
+                "id": "e49b71fb",
+                "question": "What is the first movie for which Emma Stone won the Academy Award for Best Actress, and who was her main male costar?"
+              },
+              {
+                "id": "17ef8fb6",
+                "question": "Did the male lead costar in that Emma Stone movie win the Academy Award for Best Actor for that film?"
+              }
+            ]
+          },
+          "tokens_in": 440,
+          "tokens_out": 86,
+          "cost_usd": 0.00435,
+          "latency_ms": 3511.5684000011242,
+          "started_at": "2026-07-05 10:20:28.494635",
+          "ended_at": "2026-07-05 10:20:32.006245"
+        },
+        {
+          "span_id": "1047d719dd5705dc",
+          "parent_span_id": "a4afba804e3ae207",
+          "stage": "worker",
+          "name": "worker:e49b71fb",
+          "input": {
+            "sub_question": "What is the first movie for which Emma Stone won the Academy Award for Best Actress, and who was her main male costar?"
+          },
+          "output": {
+            "sub_question_id": "e49b71fb",
+            "sub_question": "What is the first movie for which Emma Stone won the Academy Award for Best Actress, and who was her main male costar?",
+            "claims": [
+              {
+                "text": "Emma Stone won her first Academy Award for Best Actress for La La Land (2016).",
+                "source_id": "src_1",
+                "quote": "She won two Academy Awards for Best Actress for portraying an aspiring actress in the romantic musical La La Land (2016)",
+                "confidence": 0.97
+              }
+            ],
+            "open_gaps": [
+              "The sources do not identify Emma Stone's main male costar in La La Land (Ryan Gosling)."
+            ]
+          },
+          "tokens_in": 2395,
+          "tokens_out": 150,
+          "cost_usd": 0.015725,
+          "latency_ms": 3630.7538999990356,
+          "started_at": "2026-07-05 10:20:32.006322",
+          "ended_at": "2026-07-05 10:20:35.637111"
+        },
+        {
+          "span_id": "340ff6ab6f1bd996",
+          "parent_span_id": "a4afba804e3ae207",
+          "stage": "worker",
+          "name": "worker:17ef8fb6",
+          "input": {
+            "sub_question": "Did the male lead costar in that Emma Stone movie win the Academy Award for Best Actor for that film?"
+          },
+          "output": {
+            "sub_question_id": "17ef8fb6",
+            "sub_question": "Did the male lead costar in that Emma Stone movie win the Academy Award for Best Actor for that film?",
+            "claims": [
+              {
+                "text": "Emma Stone won Best Actress for La La Land at the 89th Academy Awards, and her male co-star in that film was Ryan Gosling (implied, not the Best Actor winner).",
+                "source_id": "src_4",
+                "quote": "La La Land won six awards, the most for the evening, out of its record-tying 14 nominations, including Best Actress for Emma Stone and Best Director for Damien Chazelle.",
+                "confidence": 0.6
+              },
+              {
+                "text": "The Academy Award for Best Actor at the 89th ceremony went to Casey Affleck for Manchester by the Sea, not for La La Land.",
+                "source_id": "src_4",
+                "quote": "Hacksaw Ridge and Manchester by the Sea won two awards each with Casey Affleck winning Best Actor for the latter.",
+                "confidence": 0.98
+              }
+            ],
+            "open_gaps": [
+              "The sources do not explicitly name Emma Stone's male lead co-star in La La Land (Ryan Gosling) to confirm he did not win Best Actor for that film."
+            ]
+          },
+          "tokens_in": 2461,
+          "tokens_out": 341,
+          "cost_usd": 0.02083,
+          "latency_ms": 5396.417199999632,
+          "started_at": "2026-07-05 10:20:32.008508",
+          "ended_at": "2026-07-05 10:20:37.404971"
+        },
+        {
+          "span_id": "bed40e17ba26413f",
+          "parent_span_id": "a4afba804e3ae207",
+          "stage": "reflection",
+          "name": "reflection",
+          "input": {
+            "question": "In the first movie that Emma Stone won an Academy Award for Best Actress in, did her costar win an Academy Award for Best Actor?",
+            "plan": [
+              "What is the first movie for which Emma Stone won the Academy Award for Best Actress, and who was her main male costar?",
+              "Did the male lead costar in that Emma Stone movie win the Academy Award for Best Actor for that film?"
+            ]
+          },
+          "output": {
+            "coverage_score": 0.9,
+            "rationale": "The notes confirm Emma Stone's first Best Actress win was for La La Land, that her costar was Ryan Gosling, and that Best Actor that year went to Casey Affleck for a different film, fully answering the question.",
+            "should_replan": false,
+            "new_sub_questions": []
+          },
+          "tokens_in": 1042,
+          "tokens_out": 110,
+          "cost_usd": 0.00796,
+          "latency_ms": 2891.6769000006752,
+          "started_at": "2026-07-05 10:20:37.405047",
+          "ended_at": "2026-07-05 10:20:40.296762"
+        },
+        {
+          "span_id": "dd702b1e302a4d9b",
+          "parent_span_id": "a4afba804e3ae207",
+          "stage": "synthesis",
+          "name": "synthesis",
+          "input": {
+            "question": "In the first movie that Emma Stone won an Academy Award for Best Actress in, did her costar win an Academy Award for Best Actor?"
+          },
+          "output": {
+            "text": "Emma Stone won her first Academy Award for Best Actress for La La Land (2016) [src_1]. Her male co-star in that film was Ryan Gosling, who did not win the Academy Award for Best Actor [src_4]. Instead, the Best Actor award at the 89th Academy Awards went to Casey Affleck for Manchester by the Sea [src_4]. Therefore, her costar did not win an Academy Award for Best Actor for that film.",
+            "citations": [
+              {
+                "source_id": "src_1",
+                "url": "corpus://https://en.wikipedia.org/wiki/Emma_Stone",
+                "title": "Emma Stone"
+              },
+              {
+                "source_id": "src_4",
+                "url": "corpus://https://en.wikipedia.org/wiki/89th_Academy_Awards",
+                "title": "89th Academy Awards"
+              }
+            ]
+          },
+          "tokens_in": 764,
+          "tokens_out": 179,
+          "cost_usd": 0.008295,
+          "latency_ms": 6185.012399999323,
+          "started_at": "2026-07-05 10:20:40.296787",
+          "ended_at": "2026-07-05 10:20:46.481836"
+        }
+      ],
+      "tool_calls": [
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "What is the first movie for which Emma Stone won the Academy Award for Best Actress, and who was her main male costar?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 3
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.33939999957510736
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Emma_Stone"
+          },
+          "result_summary": {
+            "content_length": 37360
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.005300000339047983
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/La_La_Land#Cast"
+          },
+          "result_summary": {
+            "content_length": 37588
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.003600000127335079
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/89th_Academy_Awards"
+          },
+          "result_summary": {
+            "content_length": 18112
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0024000000848900527
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 134,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0005000001692678779
+        },
+        {
+          "tool_name": "search",
+          "args": {
+            "query": "Did the male lead costar in that Emma Stone movie win the Academy Award for Best Actor for that film?",
+            "max_results": 6
+          },
+          "result_summary": {
+            "n_results": 3
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.3452000000834232
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/89th_Academy_Awards"
+          },
+          "result_summary": {
+            "content_length": 18112
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.00670000008540228
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/La_La_Land#Cast"
+          },
+          "result_summary": {
+            "content_length": 37588
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.003499999365885742
+        },
+        {
+          "tool_name": "fetch",
+          "args": {
+            "url": "corpus://https://en.wikipedia.org/wiki/Emma_Stone"
+          },
+          "result_summary": {
+            "content_length": 37360
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0029000002541579306
+        },
+        {
+          "tool_name": "rerank",
+          "args": {
+            "candidate_count": 134,
+            "top_k": 6
+          },
+          "result_summary": {
+            "selected_count": 6
+          },
+          "success": 1,
+          "cache_hit": 0,
+          "latency_ms": 0.0007999988156370819
+        }
+      ]
+    }
+  ]
+}
