@@ -70,6 +70,48 @@ async def test_ci_baseline_roundtrip_gets_latest(db_url):
 
 
 @pytest.mark.asyncio
+async def test_get_run_returns_none_for_missing_and_data_for_existing(db_url):
+    await db.init_schema(db_url)
+    assert await db.get_run(db_url, "does-not-exist") is None
+
+    run_id = "c" * 32
+    await db.create_run(db_url, run_id=run_id, benchmark_name="musique", config={"x": 1}, git_sha="abc", status="running")
+    row = await db.get_run(db_url, run_id)
+    assert row["run_id"] == run_id
+    assert row["status"] == "running"
+    assert row["benchmark_name"] == "musique"
+
+
+@pytest.mark.asyncio
+async def test_get_trajectories_for_run_orders_by_started_at(db_url):
+    from datetime import datetime, timedelta, timezone
+
+    await db.init_schema(db_url)
+    run_id = "d" * 32
+    await db.create_run(db_url, run_id=run_id, benchmark_name="musique", config={}, git_sha="abc", status="running")
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    await db.bulk_insert_trajectories(
+        db_url,
+        [
+            {
+                "run_id": run_id, "span_id": "s2", "parent_span_id": None, "stage": "synthesis", "name": "synthesis",
+                "tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "latency_ms": 1,
+                "started_at": base + timedelta(seconds=10), "ended_at": base + timedelta(seconds=11),
+            },
+            {
+                "run_id": run_id, "span_id": "s1", "parent_span_id": None, "stage": "plan", "name": "plan",
+                "tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "latency_ms": 1,
+                "started_at": base, "ended_at": base + timedelta(seconds=1),
+            },
+        ],
+    )
+    rows = await db.get_trajectories_for_run(db_url, run_id)
+    assert [r["stage"] for r in rows] == ["plan", "synthesis"]  # ordered by started_at, not insert order
+
+    assert await db.get_trajectories_for_run(db_url, "does-not-exist") == []
+
+
+@pytest.mark.asyncio
 async def test_judge_cache_is_idempotent_on_race(db_url):
     await db.init_schema(db_url)
     await db.set_judge_cache(db_url, cache_key="k1", verdict={"correct": True}, judge_model="m", rubric_version="v1")

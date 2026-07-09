@@ -43,12 +43,24 @@ locals {
   redis_url    = var.use_managed_data_layer ? module.data_managed[0].redis_url : "redis://localhost:6379/0"
 
   secret_params = {
-    ANTHROPIC_API_KEY    = var.anthropic_api_key
-    TAVILY_API_KEY       = var.tavily_api_key
-    DEEPRESEARCH_API_KEY = var.demo_api_key
-    DATABASE_URL         = local.database_url
-    REDIS_URL            = local.redis_url
-    POSTGRES_PASSWORD    = random_password.postgres.result
+    ANTHROPIC_API_KEY            = var.anthropic_api_key
+    OPENROUTER_API_KEY           = var.openrouter_api_key
+    TAVILY_API_KEY               = var.tavily_api_key
+    DEEPRESEARCH_API_KEY         = var.demo_api_key
+    DATABASE_URL                 = local.database_url
+    REDIS_URL                    = local.redis_url
+    POSTGRES_PASSWORD            = random_password.postgres.result
+    DEEPRESEARCH_LLM_PROVIDER    = var.deepresearch_llm_provider
+    DEEPRESEARCH_PLANNER_MODEL   = var.agent_model
+    DEEPRESEARCH_WORKER_MODEL    = var.agent_model
+    DEEPRESEARCH_REFLECTION_MODEL = var.agent_model
+    DEEPRESEARCH_SYNTHESIS_MODEL = var.agent_model
+    DEEPRESEARCH_JUDGE_MODEL     = var.judge_model
+    # Rerank stays off for the live deploy by default: bge-reranker-v2-m3 is
+    # a ~1GB first-use download (the same slow-runner-network class of issue
+    # CI hit, docs/RESULTS.md) and candidate_pool_size == rerank_top_k == 6
+    # makes it a no-op for selection either way (docs/DESIGN.md row 7).
+    DEEPRESEARCH_RERANK_ENABLED  = "false"
   }
 }
 

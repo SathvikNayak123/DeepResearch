@@ -98,6 +98,38 @@ async def test_run_research_react_mode_persists_react_steps(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_run_research_on_event_fires_for_every_stage(tmp_path):
+    """The SSE streaming endpoint (api/streaming.py) has no other hook into
+    run_research()'s progress — on_event must fire once per _call_stage,
+    in order, with the stages a plan-first run actually produces."""
+    init_telemetry()
+    db_url = f"sqlite+aiosqlite:///{tmp_path / 'orch_events_test.db'}"
+    config = RunConfig(database_url=db_url, cache_enabled=False, rerank_enabled=False)
+    backend = LocalCorpusBackend.from_dicts(DOCS)
+    llm = FakeLLMClient(seed=1)
+
+    events: list[dict] = []
+
+    async def on_event(event: dict) -> None:
+        events.append(event)
+
+    result = await run_research(
+        "What is the capital of France?", config=config, search_backend=backend, llm=llm, on_event=on_event
+    )
+
+    assert result.status == RunStatus.COMPLETED
+    assert events[0] == {"type": "run_started", "run_id": result.run_id, "question": "What is the capital of France?"}
+
+    stage_events = [e for e in events[1:] if e["type"] == "stage_complete"]
+    assert len(stage_events) >= 3  # plan, >=1 worker, reflection, synthesis
+    stages_in_order = [e["stage"] for e in stage_events]
+    assert stages_in_order[0] == "plan"
+    assert stages_in_order[-1] == "synthesis"
+    assert "worker" in stages_in_order
+    assert all(isinstance(e["latency_ms"], (int, float)) for e in stage_events)
+
+
+@pytest.mark.asyncio
 async def test_run_research_bypass_cache_flag_means_no_stats(tmp_path):
     init_telemetry()
     db_url = f"sqlite+aiosqlite:///{tmp_path / 'orch_test2.db'}"

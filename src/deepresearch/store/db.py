@@ -142,6 +142,23 @@ async def set_judge_cache(
         await conn.execute(stmt)
 
 
+async def get_run(database_url: str, run_id: str) -> dict | None:
+    engine = get_engine(database_url)
+    async with engine.begin() as conn:
+        result = await conn.execute(select(runs).where(runs.c.run_id == run_id))
+        row = result.first()
+        return dict(row._mapping) if row else None
+
+
+async def get_trajectories_for_run(database_url: str, run_id: str) -> list[dict]:
+    engine = get_engine(database_url)
+    async with engine.begin() as conn:
+        result = await conn.execute(
+            select(trajectories).where(trajectories.c.run_id == run_id).order_by(trajectories.c.started_at)
+        )
+        return [dict(row._mapping) for row in result.fetchall()]
+
+
 async def get_eval_scores_for_run(database_url: str, run_id: str) -> list[dict]:
     engine = get_engine(database_url)
     async with engine.begin() as conn:

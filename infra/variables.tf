@@ -93,6 +93,35 @@ variable "anthropic_api_key" {
   default   = ""
 }
 
+# The live deploy defaults to OpenRouter, not direct Anthropic - this
+# project's own real-key runs (docs/RESULTS.md) hit Anthropic credit
+# exhaustion repeatedly; OpenRouter/Gemini is the proven-working path. Set
+# anthropic_api_key + flip deepresearch_llm_provider to "anthropic" (and the
+# model vars below to Claude model ids) once Anthropic credit is available,
+# with no code change needed either way - src/deepresearch/llm/client.py
+# already branches on DEEPRESEARCH_LLM_PROVIDER.
+variable "openrouter_api_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "deepresearch_llm_provider" {
+  type    = string
+  default = "openrouter"
+}
+
+variable "agent_model" {
+  description = "Model id for planner/worker/reflection/synthesis - one var since this project's own sessions always run all four at the same tier."
+  type        = string
+  default     = "google/gemini-2.5-flash"
+}
+
+variable "judge_model" {
+  type    = string
+  default = "google/gemini-2.5-flash-lite"
+}
+
 # --- Keyless CD (GitHub Actions OIDC) ---
 
 variable "enable_github_oidc" {

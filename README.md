@@ -1,121 +1,69 @@
 # DeepResearch
 
-Read `docs/DESIGN.md` and `CLAUDE.md` first.
+An agentic deep-research system: ask a question, get a cited report. Built
+with the eval harness and CI regression gate as first-class parts of the
+system, not an afterthought — every architectural choice (plan-first vs.
+ReAct, rerank on/off, cache on/off) is backed by a measured ablation, not
+a guess.
 
-Planner -> parallel sub-question workers -> rerank -> reflection ->
-synthesis, with Langfuse/OTel tracing, Redis-backed search/fetch caching,
-hard budget enforcement, a Postgres/SQLite run store, and a FRAMES +
-MuSiQue benchmark harness with a reliability job — all wired end-to-end.
+**Plan → parallel sub-question workers → rerank → reflection → synthesis**,
+with full tracing (Langfuse Cloud/OTel), a Redis-backed search/fetch cache,
+hard budget enforcement, and a Postgres run store behind it.
 
-Rerank (`BAAI/bge-reranker-v2-m3` by default, `Cohere` optional) and cache
-(search results + fetched pages, Redis) are both on by default — see
-`docs/RESULTS.md` for the ablation/measurement that earned each default
-(quality delta, latency/cost deltas, full configs, `results/*.json`).
+## Demo
 
-To force a cold, cache-bypassed run (e.g. for an eval run that must not see
-stale cached content): set `DEEPRESEARCH_CACHE_ENABLED=false`, or pass
-`{"config": {"cache_enabled": false}}` in a `POST /research` body.
+![demo](docs/assets/demo.png)
+*(placeholder — capture from the live streaming UI at `/ui/` once running:
+`docker compose up --build -d`, then open http://localhost:8000/ui/, ask a
+question, screenshot the live trace + cited report.)*
+
+```bash
+python -m deepresearch.cli "Which came first, the Eiffel Tower or the Statue of Liberty?"
+```
+
+## Features
+
+- **Multi-step research pipeline** — orchestrator plans sub-questions, a
+  bounded worker pool (max 4–6) researches them in parallel, results are
+  reranked, a reflection step decides whether to replan (max 2) or move to
+  synthesis.
+- **Cited answers, checked for it** — claims map to source IDs and are
+  checked post-hoc for citation coverage/precision, not just asserted.
+- **Live streaming API + UI** — `GET /research/stream` (SSE) streams
+  plan/worker/reflection/synthesis progress as it happens; a small demo UI
+  ships at `/ui/`.
+- **Full observability** — every run gets a trace ID shared with Langfuse,
+  plus Prometheus/Grafana dashboards for cache hit rate and infra metrics.
+- **Real eval harness, not a toy** — FRAMES + MuSiQue benchmark runs, a
+  reliability job (repeat-run variance, not point estimates), and a
+  DeepResearch Bench implementation, all against a local corpus for
+  reproducible, CI-safe scoring.
+- **CI regression gate** — every PR runs a smoke eval against a stored
+  baseline and fails on accuracy/citation/latency regressions.
+- **Every default is a measured ablation** — rerank on/off, cache on/off,
+  and plan-first vs. ReAct are all backed by real numbers in
+  `docs/RESULTS.md`, including one case where a single run gave the wrong
+  answer and a mandated 3x repeat reversed it.
 
 ## Setup
 
 ```bash
 cp .env.example .env
 # fill in ANTHROPIC_API_KEY and TAVILY_API_KEY
-# generate Langfuse secrets: openssl rand -hex 32 (x3, for SALT/NEXTAUTH_SECRET/ENCRYPTION_KEY)
+# sign up free at cloud.langfuse.com, create a project, fill in
+# LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY
 pip install -e ".[dev,eval]"
 ```
 
-## Run
-
-One command, one research question, one cited report:
-
 ```bash
-python -m deepresearch.cli "Which came first, the Eiffel Tower or the Statue of Liberty?"
+docker compose up --build -d   # starts the API, Postgres, Redis, Prometheus, Grafana
+# (equivalent to `make up`, if you have make installed)
 ```
 
-> **This live path needs real keys.** The CLI (and `POST /research`) call the real
-> Anthropic + Tavily APIs — there is **no fake-client fallback on the live path**, so a
-> keyless clean clone will fail here. For an offline, no-cost end-to-end run (frozen
-> corpus + `FakeLLMClient`), use the eval harness below (`python -m eval.run_eval
-> --mode smoke`) instead — that path *does* auto-fall-back with a loud banner.
+## Learn more
 
-Or via the API:
-
-```bash
-make up
-curl -X POST localhost:8000/research -H "Content-Type: application/json" \
-  -d '{"question": "Which came first, the Eiffel Tower or the Statue of Liberty?"}'
-```
-
-Langfuse UI: http://localhost:3000 (create an account, then set
-`LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` in `.env` from a new project's API
-keys, restart `app`). Each run's trace shares its `run_id` as the OTel trace
-ID — search Langfuse for it to see the full connected trace.
-
-## Test
-
-```bash
-make test         # unit tests, incl. budget-ceiling enforcement with a tiny budget
-make demo          # 3 hand-picked live questions end-to-end, trajectories written to trajectories/
-python scripts/rerank_ablation.py --n 50    # rerank ablation vs MuSiQue gold docs, see docs/RESULTS.md
-python scripts/cache_measurement.py --n 20  # cold/warm/mixed/bypass cache measurement, see docs/RESULTS.md
-```
-
-## Run store + eval harness
-
-```bash
-python scripts/migrate.py           # apply the schema to $DATABASE_URL (or the SQLite default)
-make eval-smoke                     # ~20q FRAMES + ~20q MuSiQue, local corpus, writes eval_scores
-make eval-full                      # ~100q each — FRAMES-full is slow, see docs/RESULTS.md
-make eval-reliability                # 20q x 3 repeats -> variance + all-consistent rate
-make eval-drb                       # gated manual-only DeepResearch Bench stub, prints cost first
-```
-
-> **Local runs and the reranker.** Rerank is on by default, which pulls the ~1 GB
-> `bge-reranker-v2-m3` cross-encoder on first use. On some
-> `torch`/`sentence-transformers` combinations it also raises
-> `NotImplementedError: Cannot copy out of meta tensor` on first load (a version
-> incompatibility, not a logic bug). CI/nightly and the committed real baseline all
-> run with `DEEPRESEARCH_RERANK_ENABLED=false`, which is a no-op for *selection*
-> (`candidate_pool_size == rerank_top_k == 6`, so the same candidates are kept) and
-> sidesteps both the download and the crash. Set it for local eval runs too unless you
-> specifically want to exercise the reranker.
-
-Every `run_research()` call — live or eval — writes a `runs` row (plus
-`trajectories`/`tool_calls`) to `DATABASE_URL` automatically; defaults to a
-local SQLite file (`sqlite+aiosqlite:///./deepresearch.db`, docs/DESIGN.md's
-own documented dev-loop swap) if unset, or point it at
-`postgresql+asyncpg://...` for the docker-compose `postgres` service. FRAMES
-and MuSiQue both run against `LocalCorpusBackend` (real BM25 retrieval, no
-network calls except FRAMES' one-time Wikipedia ingestion) so results are
-reproducible and CI-safe.
-
-**No `ANTHROPIC_API_KEY` set?** The harness auto-falls-back to a
-`FakeLLMClient` and prints a loud banner — useful for verifying the
-mechanics (it's exactly how this repo's own first baseline in
-`docs/RESULTS.md` was produced), but treat any resulting scores as harness
-validation, not real model performance. Set the key to get real numbers.
-
-`make` isn't required — every target is a thin wrapper around a
-`python -m ...` / `python scripts/...` invocation shown in the Makefile;
-run those directly if `make` isn't installed.
-
-## Observability
-
-`GET /metrics` (Prometheus format) exposes `deepresearch_cache_hits_total` /
-`deepresearch_cache_misses_total`, labeled by `cache_type` (`search`/`fetch`).
-`make up` starts Prometheus (scrapes `app:8000/metrics` every 15s) and
-Grafana (http://localhost:3001, anonymous viewer access, dashboard
-"DeepResearch — Cache Hit Rate" provisioned automatically) alongside
-Langfuse. Not verified against live traffic in dev (no Docker daemon in the
-sandbox this was built in) — the panels are shaped and provisioned, but
-confirm hit rates render by hitting `/research` a few times with real keys
-and checking Grafana.
-
-## Verifying budget enforcement
-
-`make test` includes `tests/test_budget.py`, which sets `max_total_tokens`,
-`max_usd`, and `max_wall_clock_seconds` to tiny values and asserts
-`BudgetExceeded` is raised. To see it hit inside a real run, set
-`DEEPRESEARCH_` budget overrides very low in the `config.budget` field of a
-`POST /research` request body.
+- `docs/DESIGN.md` — architecture, decision table with alternatives
+  considered, eval design, run-store schema.
+- `docs/RESULTS.md` — every claim above backed by real numbers: raw
+  configs, ablation results, bugs found and fixed, a live AWS deploy, full
+  eval runs.

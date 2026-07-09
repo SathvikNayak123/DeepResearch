@@ -31,6 +31,12 @@ _QUALITY_METRICS = {
     ("frames", "accuracy"): "frames.accuracy",
     ("frames", "citation_precision"): "frames.citation_precision",
     ("musique", "answer_f1"): "musique.answer_f1",
+    # Raw-report token F1 (above) is crushed by report length regardless of
+    # answer quality (docs/RESULTS.md) - this is the same F1 computed against
+    # a judge-extracted short answer instead, comparable to MuSiQue's own
+    # published (short-answer) baselines. Both are kept: the raw one as the
+    # historical/gated number, this one as the literature-comparable one.
+    ("musique", "answer_f1_extracted"): "musique.answer_f1_extracted",
 }
 _COST_BENCHMARKS = ["frames", "musique"]
 # docs/DESIGN.md §5.2's own agentic metric ("did the run finish inside

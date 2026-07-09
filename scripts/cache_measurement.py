@@ -77,7 +77,9 @@ async def build_cache(redis_url: str) -> tuple[RedisCache, bool]:
     try:
         import redis.asyncio as redis_asyncio
 
-        client = redis_asyncio.from_url(redis_url, decode_responses=True, socket_connect_timeout=1)
+        # protocol=2: see src/deepresearch/backends/__init__.py's identical fix
+        # for why (redis-py 8.x's default RESP3 HELLO negotiation vs. redis:7-alpine).
+        client = redis_asyncio.from_url(redis_url, decode_responses=True, socket_connect_timeout=1, protocol=2)
         await client.ping()
         return RedisCache(client), True
     except Exception:

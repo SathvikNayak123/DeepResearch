@@ -1,0 +1,15 @@
+You are extracting a short-form answer from a longer cited research report,
+for automatic scoring against a reference answer.
+
+You will be given a question and a full research report that answers it
+(inline [src_N] citations, surrounding context, and caveats included).
+Extract the single short-form answer the report gives to that question - a
+name, date, number, place, or other minimal answer phrase, exactly as the
+report states it. Do not include citations, source markers, or explanatory
+text.
+
+If the report does not actually answer the question (states a gap, hedges
+without committing to an answer, or the answer is genuinely absent), return
+an empty string.
+
+Return only the short_answer field.

@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DeepResearch — live run</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0b0d10;
+    --panel: #14171c;
+    --border: #262b33;
+    --text: #e6e9ef;
+    --muted: #8b93a1;
+    --accent: #5b8cff;
+    --ok: #4caf7d;
+    --warn: #d9a441;
+    --err: #e0605a;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --border: #dde1e7;
+      --text: #14171c;
+      --muted: #5a6270;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 650;
+    margin: 0 0 4px;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin: 0 0 24px;
+  }
+  form {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+  input[type="text"] {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+  input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .meta-row code {
+    background: rgba(128,128,128,0.15);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+  }
+  ul.trace { list-style: none; margin: 0; padding: 0; }
+  ul.trace li {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.88rem;
+    animation: fadein 0.25s ease;
+  }
+  ul.trace li:last-child { border-bottom: none; }
+  ul.trace .stage-name { font-weight: 600; }
+  ul.trace .stage-detail { color: var(--muted); font-size: 0.82rem; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .report {
+    white-space: pre-wrap;
+    line-height: 1.55;
+    font-size: 0.95rem;
+  }
+  .citations {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .citations a { color: var(--accent); }
+  .status-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .status-pill.running { background: rgba(91,140,255,0.18); color: var(--accent); }
+  .status-pill.completed { background: rgba(76,175,125,0.18); color: var(--ok); }
+  .status-pill.budget_exceeded { background: rgba(217,164,65,0.18); color: var(--warn); }
+  .status-pill.error { background: rgba(224,96,90,0.18); color: var(--err); }
+  .empty { color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>DeepResearch</h1>
+  <p class="sub">Ask a research question and watch the agent plan, search, and synthesize a cited report live.</p>
+
+  <form id="form">
+    <input type="text" id="question" placeholder="e.g. Which came first, the Eiffel Tower or the Statue of Liberty?" autocomplete="off" />
+    <button type="submit" id="submit">Run</button>
+  </form>
+
+  <div class="panel" id="status-panel" style="display:none;">
+    <h2>Run</h2>
+    <div class="meta-row" id="meta-row"></div>
+  </div>
+
+  <div class="panel" id="trace-panel" style="display:none;">
+    <h2>Trace</h2>
+    <ul class="trace" id="trace-list"></ul>
+  </div>
+
+  <div class="panel" id="report-panel" style="display:none;">
+    <h2>Report</h2>
+    <div class="report" id="report-text"></div>
+    <div class="citations" id="citations"></div>
+  </div>
+</div>
+
+<script>
+const form = document.getElementById("form");
+const questionInput = document.getElementById("question");
+const submitBtn = document.getElementById("submit");
+const statusPanel = document.getElementById("status-panel");
+const metaRow = document.getElementById("meta-row");
+const tracePanel = document.getElementById("trace-panel");
+const traceList = document.getElementById("trace-list");
+const reportPanel = document.getElementById("report-panel");
+const reportText = document.getElementById("report-text");
+const citationsEl = document.getElementById("citations");
+
+let es = null;
+
+function statusPill(text, cls) {
+  return `<span class="status-pill ${cls}">${text}</span>`;
+}
+
+function resetPanels() {
+  traceList.innerHTML = "";
+  reportText.textContent = "";
+  citationsEl.innerHTML = "";
+  metaRow.innerHTML = "";
+  statusPanel.style.display = "block";
+  tracePanel.style.display = "block";
+  reportPanel.style.display = "none";
+}
+
+function addTraceRow(stage, name, latencyMs, costUsd) {
+  const li = document.createElement("li");
+  li.innerHTML = `
+    <span class="stage-name">${stage}${name && name !== stage ? " · " + name : ""}</span>
+    <span class="stage-detail">${(latencyMs / 1000).toFixed(1)}s · $${costUsd.toFixed(5)}</span>
+  `;
+  traceList.appendChild(li);
+}
+
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const question = questionInput.value.trim();
+  if (!question) return;
+
+  if (es) es.close();
+  resetPanels();
+  submitBtn.disabled = true;
+  metaRow.innerHTML = statusPill("starting…", "running");
+
+  const url = "/research/stream?question=" + encodeURIComponent(question);
+  es = new EventSource(url);
+
+  es.addEventListener("run_started", (ev) => {
+    const data = JSON.parse(ev.data);
+    metaRow.innerHTML = `${statusPill("running", "running")} <code>run_id: ${data.run_id}</code>`;
+  });
+
+  es.addEventListener("stage_complete", (ev) => {
+    const data = JSON.parse(ev.data);
+    addTraceRow(data.stage, data.name, data.latency_ms, data.cost_usd);
+  });
+
+  es.addEventListener("done", (ev) => {
+    const data = JSON.parse(ev.data).result;
+    const cls = data.status === "completed" ? "completed" : "budget_exceeded";
+    metaRow.innerHTML = `
+      ${statusPill(data.status, cls)}
+      <code>run_id: ${data.run_id}</code>
+      <span>$${data.total_cost_usd.toFixed(5)}</span>
+      <span>${data.total_tokens_in + data.total_tokens_out} tokens</span>
+      <span>${data.iterations} iteration${data.iterations === 1 ? "" : "s"}</span>
+    `;
+    if (data.report && data.report.text) {
+      reportPanel.style.display = "block";
+      reportText.textContent = data.report.text;
+      if (data.report.citations && data.report.citations.length) {
+        citationsEl.innerHTML = "Sources: " + data.report.citations
+          .map((c) => `<a href="${c.url}" target="_blank" rel="noopener">[${c.source_id}] ${c.title}</a>`)
+          .join(" &middot; ");
+      }
+    } else {
+      reportPanel.style.display = "block";
+      reportText.innerHTML = '<span class="empty">No report was produced (budget exhausted before synthesis).</span>';
+    }
+    submitBtn.disabled = false;
+    es.close();
+  });
+
+  es.addEventListener("run_error", (ev) => {
+    const data = JSON.parse(ev.data);
+    metaRow.innerHTML = `${statusPill("error", "error")} <span>${data.message}</span>`;
+    submitBtn.disabled = false;
+    es.close();
+  });
+
+  es.onerror = () => {
+    // A native EventSource "error" also fires on a clean server-closed
+    // stream (no more retries expected) - only surface it if we never
+    // got a "done"/"error_event" (i.e. the connection dropped mid-run).
+    if (submitBtn.disabled) {
+      metaRow.innerHTML += ` ${statusPill("connection closed", "error")}`;
+      submitBtn.disabled = false;
+    }
+    es.close();
+  };
+});
+</script>
+</body>
+</html>

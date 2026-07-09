@@ -1,0 +1,146 @@
+{
+  "is_real_llm": true,
+  "n": 1,
+  "seed": 42,
+  "repeats": 2,
+  "variants": [
+    {
+      "variant": "plan_first_pool4",
+      "config_overrides": {
+        "planning_style": "plan_first",
+        "max_workers": 4
+      },
+      "n": 1,
+      "repeats": 2,
+      "per_repeat_mean_answer_f1": [
+        0.15384615384615385,
+        0.1621621621621622
+      ],
+      "per_repeat_mean_answer_contains_gold": [
+        0.0,
+        0.0
+      ],
+      "mean_answer_f1": 0.158004158004158,
+      "stdev_answer_f1": 0.005880305872653222,
+      "mean_answer_contains_gold": 0.0,
+      "stdev_answer_contains_gold": 0.0,
+      "all_consistent_rate": 1.0,
+      "mean_wall_clock_seconds_per_question": 52.30208915000003,
+      "mean_total_agent_cost_usd_per_repeat": 0.0067056999999999985,
+      "total_agent_cost_usd_all_repeats": 0.013411399999999997,
+      "repeat_summaries": [
+        {
+          "variant": "plan_first_pool4",
+          "config_overrides": {
+            "planning_style": "plan_first",
+            "max_workers": 4
+          },
+          "n": 1,
+          "wall_clock_seconds_total": 70.05898760000014,
+          "wall_clock_seconds_per_question": 70.05898760000014,
+          "mean_answer_f1": 0.15384615384615385,
+          "mean_answer_contains_gold": 0.0,
+          "total_agent_cost_usd": 0.006775399999999998,
+          "mean_iterations_per_question": 3.0,
+          "trajectory": {
+            "task_completion_rate": 1.0,
+            "tool_call_success_rate": 1.0,
+            "mean_steps_per_solved_task": 56.0,
+            "mean_tokens_per_solved_task": 11724.0,
+            "n_runs": 1
+          }
+        },
+        {
+          "variant": "plan_first_pool4",
+          "config_overrides": {
+            "planning_style": "plan_first",
+            "max_workers": 4
+          },
+          "n": 1,
+          "wall_clock_seconds_total": 34.54519069999992,
+          "wall_clock_seconds_per_question": 34.54519069999992,
+          "mean_answer_f1": 0.1621621621621622,
+          "mean_answer_contains_gold": 0.0,
+          "total_agent_cost_usd": 0.0066359999999999995,
+          "mean_iterations_per_question": 3.0,
+          "trajectory": {
+            "task_completion_rate": 1.0,
+            "tool_call_success_rate": 1.0,
+            "mean_steps_per_solved_task": 40.0,
+            "mean_tokens_per_solved_task": 10064.0,
+            "n_runs": 1
+          }
+        }
+      ]
+    },
+    {
+      "variant": "react",
+      "config_overrides": {
+        "planning_style": "react",
+        "max_react_steps": 4
+      },
+      "n": 1,
+      "repeats": 2,
+      "per_repeat_mean_answer_f1": [
+        0.10714285714285715,
+        0.13043478260869565
+      ],
+      "per_repeat_mean_answer_contains_gold": [
+        0.0,
+        0.0
+      ],
+      "mean_answer_f1": 0.1187888198757764,
+      "stdev_answer_f1": 0.016469878443786036,
+      "mean_answer_contains_gold": 0.0,
+      "stdev_answer_contains_gold": 0.0,
+      "all_consistent_rate": 1.0,
+      "mean_wall_clock_seconds_per_question": 20.844698849999986,
+      "mean_total_agent_cost_usd_per_repeat": 0.00352835,
+      "total_agent_cost_usd_all_repeats": 0.0070567,
+      "repeat_summaries": [
+        {
+          "variant": "react",
+          "config_overrides": {
+            "planning_style": "react",
+            "max_react_steps": 4
+          },
+          "n": 1,
+          "wall_clock_seconds_total": 22.49122939999984,
+          "wall_clock_seconds_per_question": 22.49122939999984,
+          "mean_answer_f1": 0.10714285714285715,
+          "mean_answer_contains_gold": 0.0,
+          "total_agent_cost_usd": 0.0037668,
+          "mean_iterations_per_question": 2.0,
+          "trajectory": {
+            "task_completion_rate": 1.0,
+            "tool_call_success_rate": 1.0,
+            "mean_steps_per_solved_task": 16.0,
+            "mean_tokens_per_solved_task": 4482.0,
+            "n_runs": 1
+          }
+        },
+        {
+          "variant": "react",
+          "config_overrides": {
+            "planning_style": "react",
+            "max_react_steps": 4
+          },
+          "n": 1,
+          "wall_clock_seconds_total": 19.198168300000134,
+          "wall_clock_seconds_per_question": 19.198168300000134,
+          "mean_answer_f1": 0.13043478260869565,
+          "mean_answer_contains_gold": 0.0,
+          "total_agent_cost_usd": 0.0032899,
+          "mean_iterations_per_question": 2.0,
+          "trajectory": {
+            "task_completion_rate": 1.0,
+            "tool_call_success_rate": 1.0,
+            "mean_steps_per_solved_task": 16.0,
+            "mean_tokens_per_solved_task": 4117.0,
+            "n_runs": 1
+          }
+        }
+      ]
+    }
+  ]
+}

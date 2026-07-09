@@ -68,6 +68,13 @@ class RunConfig:
     rerank_backend: str = field(default_factory=lambda: os.getenv("DEEPRESEARCH_RERANK_BACKEND", "bge"))
     candidate_pool_size: int = 6  # search results fetched before reranking
     rerank_top_k: int = 6  # chunks kept for the worker's LLM context after reranking
+    # Caps chunks-per-source fed into the reranker (docs/RESULTS.md: a full
+    # Wikipedia article can chunk into dozens of ~800-char windows; scoring
+    # every one is why FRAMES rerank calls measured 130-400s+ each in a real
+    # run). A no-op for already-short, pre-chunked documents (MuSiQue).
+    max_chunks_per_source: int = field(
+        default_factory=lambda: int(os.getenv("DEEPRESEARCH_MAX_CHUNKS_PER_SOURCE", "10"))
+    )
 
     # Caching (docs/DESIGN.md decision row 8). A cache, not agent memory —
     # no cross-run reasoning state, only raw search/fetch payload reuse.

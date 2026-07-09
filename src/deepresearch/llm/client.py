@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from dataclasses import dataclass
@@ -111,27 +112,58 @@ class LLMClient:
         self, *, model: str, system: str, user_content: str, schema: dict, max_tokens: int
     ) -> tuple[dict, LLMUsage]:
         """OpenAI-compatible chat-completions shape - no "effort" knob (that's
-        an Anthropic-specific parameter with no OpenRouter/OpenAI equivalent)."""
-        response = await self._client.post(
-            "/chat/completions",
-            json={
-                "model": model,
-                "max_tokens": max_tokens,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user_content},
-                ],
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": {"name": "response", "strict": True, "schema": schema},
+        an Anthropic-specific parameter with no OpenRouter/OpenAI equivalent).
+
+        Retries on OpenRouter's observed transient failure mode: a 200 OK
+        response whose body embeds `choices[0].error` (e.g. an upstream
+        rate-limit "JSON error injected into SSE stream") with truncated
+        `content` that fails json.loads - confirmed live during this
+        project's first real-key OpenRouter smoke run (transient: 3/3
+        immediate retries succeeded there). A second real occurrence (the
+        architecture ablation, same day, heavier same-day call volume)
+        outlasted the original 3-attempt/~4.5s-total backoff, so this is
+        sustained-enough under load to need more patience, not just a
+        one-off blip: 5 attempts, 2/4/8/16s backoff (~30s total) before
+        giving up. A crash here mid-benchmark would otherwise discard the
+        whole run's in-memory trajectory (RunRecorder only flushes at the
+        end - see docs/RESULTS.md's trace-replay section), so waiting up to
+        30s here is much cheaper than re-running the benchmark.
+        """
+        last_exc: Exception | None = None
+        max_attempts = 5
+        for attempt in range(max_attempts):
+            response = await self._client.post(
+                "/chat/completions",
+                json={
+                    "model": model,
+                    "max_tokens": max_tokens,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user_content},
+                    ],
+                    "response_format": {
+                        "type": "json_schema",
+                        "json_schema": {"name": "response", "strict": True, "schema": schema},
+                    },
                 },
-            },
-        )
-        response.raise_for_status()
-        body = response.json()
-        text = body["choices"][0]["message"]["content"]
-        data = json.loads(text)
-        usage_in = body["usage"]["prompt_tokens"]
-        usage_out = body["usage"]["completion_tokens"]
-        usage = LLMUsage(input_tokens=usage_in, output_tokens=usage_out, cost_usd=_cost(model, usage_in, usage_out))
-        return data, usage
+            )
+            response.raise_for_status()
+            body = response.json()
+            choice = body["choices"][0]
+            try:
+                if choice.get("error"):
+                    raise ValueError(f"OpenRouter choice error: {choice['error']}")
+                data = json.loads(choice["message"]["content"])
+            except (ValueError, json.JSONDecodeError) as exc:
+                last_exc = exc
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(2.0 * (2**attempt))  # 2s, 4s, 8s, 16s
+                    continue
+                raise
+            usage_in = body["usage"]["prompt_tokens"]
+            usage_out = body["usage"]["completion_tokens"]
+            usage = LLMUsage(
+                input_tokens=usage_in, output_tokens=usage_out, cost_usd=_cost(model, usage_in, usage_out)
+            )
+            return data, usage
+        raise last_exc  # unreachable, satisfies type checkers

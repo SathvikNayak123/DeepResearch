@@ -238,17 +238,18 @@ land, the *measured* cost replaces the estimate in the baseline record itself
   across truly concurrent async workers (vs. sequential chains) is asserted in
   Langfuse's docs but not something research turned up a concrete tested example
   for — verify it holds before relying on it architecturally.
-- **Langfuse**, self-hosted via docker-compose. Current architecture (v3) needs
-  Postgres + ClickHouse + Redis/Valkey + S3-compatible blob storage (MinIO locally)
-  — heavier than "just Postgres," confirmed by research. Accepts OTLP directly at
-  `/api/public/otel` (Basic Auth via base64 `pk:sk`), so no proprietary SDK
-  requirement — the standard `opentelemetry-exporter-otlp` package works. Built-in
-  dashboards cover cost/latency/eval-score aggregation by run/model/prompt version.
-  *(Lower-ops alternative if self-hosting friction is high mid-project: Langfuse
-  Cloud's free/hobby tier — same OTel ingestion, no ClickHouse/MinIO to run
-  locally. Noted as a swap-in, not the default, since the user's stack explicitly
-  wants a docker-compose that stands up the observability tier along with
-  everything else.)*
+- **Langfuse Cloud** (free/hobby tier), reversed from the original self-hosted
+  docker-compose default. Self-hosting Langfuse v3 needs its own
+  Postgres + ClickHouse + Redis/Valkey + S3-compatible blob storage (MinIO
+  locally) on top of the app's own Postgres/Redis — 5 extra containers and 3
+  generated secrets (`NEXTAUTH_SECRET`/`SALT`/`ENCRYPTION_KEY`) that bought
+  nothing for a single-developer local/demo setup. Cloud accepts OTLP directly
+  at `/api/public/otel` (Basic Auth via base64 `pk:sk`) exactly like the
+  self-hosted instance, so no code or SDK change — only `LANGFUSE_HOST` and a
+  project's public/secret keys differ. `docker-compose.yml` no longer stands
+  up `langfuse-db`/`langfuse-redis`/`langfuse-clickhouse`/`langfuse-minio`/
+  `langfuse-web`/`langfuse-worker`. Self-hosting remains documented here as a
+  fallback if data residency ever requires it, but is not the default.
 - **Prometheus + Grafana**, layered on top for infra-level metrics (service uptime,
   queue depth, error rates) that Langfuse cannot export in Prometheus format
   (confirmed open feature request, not shipped as of this research).
@@ -256,8 +257,9 @@ land, the *measured* cost replaces the estimate in the baseline record itself
   vs. the `ci_baselines` table (fails the check if a tracked metric regresses beyond
   a configured tolerance); `nightly.yml` runs the full suite on a cron schedule and
   uploads a metric-table artifact.
-- **docker-compose**: agent API, Redis, Postgres, Langfuse (+ its ClickHouse/MinIO
-  dependencies), Prometheus, Grafana — the full local stack.
+- **docker-compose**: agent API, Redis, Postgres, Prometheus, Grafana — the full
+  local stack. Langfuse itself runs on Langfuse Cloud (see above), not in
+  docker-compose.
 - **Deployment target** (superseded by decision rows 12-13, `infra/`): AWS ECS
   Fargate behind an Application Load Balancer, `infra/` (Terraform). Networking
   uses public subnets with tasks getting a public IP directly — **no NAT

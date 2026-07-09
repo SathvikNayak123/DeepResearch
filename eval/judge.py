@@ -38,6 +38,13 @@ CITATION_SCHEMA = {
     "additionalProperties": False,
 }
 
+SHORT_ANSWER_SCHEMA = {
+    "type": "object",
+    "properties": {"short_answer": {"type": "string"}},
+    "required": ["short_answer"],
+    "additionalProperties": False,
+}
+
 # Planning estimate for cost-before-running printouts (task 5) — not a
 # measured average. Refine once eval_scores/judge_cache rows give real usage
 # to average over; this is deliberately conservative (rounds up).
@@ -96,6 +103,48 @@ class Judge:
             rubric_version=self._config.judge_rubric_version,
         )
         return data["correct"], data["rationale"], False
+
+    async def extract_short_answer(self, *, question: str, report_text: str) -> tuple[str, bool]:
+        """Returns (short_answer, was_cache_hit).
+
+        MuSiQue's gold answers are short (a name, date, number); this agent
+        produces a full cited multi-sentence report. Standard SQuAD-style
+        token F1 (eval/metrics/answer_f1.py) computed directly against the
+        raw report text crushes precision purely from length, even when the
+        report states the fact correctly (see gold_contained's docstring —
+        a real example: a report stating "Springfield became the capital of
+        Illinois in 1839" scored answer_f1=0.05 against gold "1839" despite
+        answer_contains_gold=1). This pulls the terse answer back out first
+        so F1 measures answer correctness, not report verbosity.
+        """
+        if not report_text.strip():
+            return "", False
+
+        cache_key = _cache_key("extract", self._config.judge_rubric_version, question, report_text)
+        cached = await db.get_judge_cache(self._config.database_url, cache_key)
+        if cached is not None:
+            self.cache_hits += 1
+            return cached["verdict"]["short_answer"], True
+
+        system = load_eval_prompt("extract_answer_v1.txt")
+        user_content = f"Question: {question}\n\nFull report:\n{report_text}"
+        data, usage = await self._llm.complete_json(
+            model=self._config.judge_model,
+            system=system,
+            user_content=user_content,
+            schema=SHORT_ANSWER_SCHEMA,
+            max_tokens=64,
+        )
+        self.calls_made += 1
+        self.total_cost_usd += usage.cost_usd
+        await db.set_judge_cache(
+            self._config.database_url,
+            cache_key=cache_key,
+            verdict=data,
+            judge_model=self._config.judge_model,
+            rubric_version=self._config.judge_rubric_version,
+        )
+        return data["short_answer"], False
 
     async def judge_citation(self, *, claim: str, quote: str) -> tuple[bool, str, bool]:
         """Returns (supported, rationale, was_cache_hit)."""

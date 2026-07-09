@@ -22,6 +22,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -90,9 +91,17 @@ async def run_musique(n: int, seed: int, *, database_url: str) -> dict:
     examples = musique_bench.load_subset(n, seed)
     llm, is_real = make_llm()
 
+    # Extraction is a cheap judge-model call per question (docs/RESULTS.md:
+    # raw-report answer_f1 is crushed by report length, not answer quality —
+    # a real example scored 0.05 despite stating the gold fact correctly).
+    judge_config = RunConfig(database_url=database_url)
+    judge = Judge(llm, judge_config)
+
     print(f"[musique] {len(examples)} questions. Estimated agent cost: "
           f"${len(examples) * ESTIMATED_AGENT_COST_PER_QUESTION_USD:.2f} "
-          f"(no judge calls — MuSiQue is scored by Answer F1, string-based)")
+          f"+ extraction ~${estimate_judge_cost_usd(len(examples), judge_config.judge_model):.4f} "
+          f"({judge_config.judge_model}) — MuSiQue is scored by Answer F1 (string-based) "
+          f"both against the raw report and against an extracted short answer")
 
     results = []
     scores_rows = []
@@ -109,9 +118,13 @@ async def run_musique(n: int, seed: int, *, database_url: str) -> dict:
         f1 = best_answer_f1(predicted, ex.gold_answers)
         contains_gold = float(any(gold_contained(predicted, g) for g in ex.gold_answers))
 
+        short_answer, _ = await judge.extract_short_answer(question=ex.question, report_text=predicted)
+        f1_extracted = best_answer_f1(short_answer, ex.gold_answers)
+
         question_scores = [
             _score_row(result.run_id, "musique", ex.question_id, "answer_f1", f1),
             _score_row(result.run_id, "musique", ex.question_id, "answer_contains_gold", contains_gold),
+            _score_row(result.run_id, "musique", ex.question_id, "answer_f1_extracted", f1_extracted),
         ]
         # Flushed per-question, not batched to the end of the loop: a crash on
         # question k (a downstream API error, a budget blowout) must not discard
@@ -132,8 +145,12 @@ async def run_musique(n: int, seed: int, *, database_url: str) -> dict:
         "wall_clock_seconds": elapsed,
         "mean_answer_f1": _mean(scores_rows, "answer_f1"),
         "mean_answer_contains_gold": _mean(scores_rows, "answer_contains_gold"),
+        "mean_answer_f1_extracted": _mean(scores_rows, "answer_f1_extracted"),
         "trajectory": traj.summary(),
         "total_agent_cost_usd": sum(r.total_cost_usd for r in results),
+        "extraction_calls_made": judge.calls_made,
+        "extraction_cache_hits": judge.cache_hits,
+        "extraction_actual_cost_usd": judge.total_cost_usd,
     }
 
 
@@ -238,10 +255,24 @@ async def run_reliability(n: int, repeats: int, seed: int, *, database_url: str)
     report = compute_reliability(per_question_correct)
     summary = {"is_real_llm": is_real, "total_agent_cost_usd": total_cost, **report.summary()}
 
+    # These 3 summary metrics aren't tied to any single question's run, but
+    # eval_scores.run_id is a real Postgres UUID column with a FK to runs.run_id
+    # (SQLite's loose typing/FK enforcement let f"reliability-{git_sha}" - not
+    # UUID-shaped, not a real runs row - silently pass here before; Postgres
+    # rejects it outright). Anchor to a dedicated synthetic runs row instead.
+    reliability_run_id = uuid.uuid4().hex
+    await db.create_run(
+        database_url,
+        run_id=reliability_run_id,
+        benchmark_name="reliability",
+        config={"n": n, "repeats": repeats, "seed": seed},
+        git_sha=current_git_sha(),
+        status="completed",
+    )
     await db.bulk_insert_eval_scores(
         database_url,
         [
-            _score_row(f"reliability-{current_git_sha()}", "reliability", None, key, value)
+            _score_row(reliability_run_id, "reliability", None, key, value)
             for key, value in (
                 ("mean_accuracy", report.mean_accuracy),
                 ("stdev_accuracy", report.stdev_accuracy),
