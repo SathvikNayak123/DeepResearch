@@ -273,6 +273,15 @@ land, the *measured* cost replaces the estimate in the baseline record itself
   Designed for teardown: `terraform destroy` plus `scripts/residual_check.sh`
   (tag-based residual-resource sweep) is the clean, complete teardown — see
   `infra/README.md`. Local dev still uses `docker compose down -v`.
+- **`.github/workflows/deploy.yml`** (keyless OIDC via `infra/modules/github_oidc`,
+  auto-rollback to the prior ECS task-definition revision on failed health check)
+  runs on every push to `main`. Since infra is designed for teardown (row above),
+  **this workflow is expected to fail whenever infra isn't currently applied** — a
+  guard step checks `AWS_DEPLOY_ROLE_ARN` looks like a real role ARN and fails fast
+  with a readable message pointing at the `terraform apply` + variable-set steps,
+  rather than surfacing `aws-actions/configure-aws-credentials`'s generic "Source
+  Account ID is needed" error. A red `deploy` check on `main` does not by itself
+  mean the pipeline is broken — check whether infra is currently up first.
 
 ## 7. Non-goals (explicit, with reasoning)
 

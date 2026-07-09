@@ -53,6 +53,27 @@ jobs:
           echo "region=${{ vars.AWS_REGION || secrets.AWS_REGION || 'us-east-1' }}" >> "$GITHUB_OUTPUT"
           echo "alb_url=${{ vars.ALB_URL || secrets.ALB_URL }}" >> "$GITHUB_OUTPUT"
 
+      # Fails fast with a readable message instead of letting
+      # aws-actions/configure-aws-credentials surface its generic "Source
+      # Account ID is needed..." error, which looks like a broken pipeline
+      # rather than "infra is torn down right now" (docs/DESIGN.md decision
+      # row 13: apply -> verify -> destroy is the expected demo cycle, so
+      # this branch triggering with no live role is a normal state, not a bug).
+      - name: Verify role ARN is configured
+        env:
+          ROLE_ARN: ${{ steps.cfg.outputs.role_arn }}
+        run: |
+          case "$ROLE_ARN" in
+            arn:aws:iam::*:role/*) ;;
+            *)
+              echo "::error::AWS_DEPLOY_ROLE_ARN is unset or not a valid role ARN (got: '${ROLE_ARN}')."
+              echo "::error::Infra is likely torn down (expected between demos, see docs/DESIGN.md row 13)."
+              echo "::error::To deploy: terraform apply -var enable_github_oidc=true in infra/, then set the"
+              echo "::error::AWS_DEPLOY_ROLE_ARN repo variable to \$(terraform output -raw github_deploy_role_arn)."
+              exit 1
+              ;;
+          esac
+
       - name: Configure AWS credentials (OIDC, no stored keys)
         uses: aws-actions/configure-aws-credentials@v4
         with:
