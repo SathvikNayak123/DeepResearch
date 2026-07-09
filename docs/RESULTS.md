@@ -1206,3 +1206,83 @@ python -m eval.benchmarks.deepresearch_bench --mode weekly --n 2 --confirm --dat
 # Real weekly-10 or monthly-100 runs: drop --n (defaults to 10/100 per --mode),
 # or pass --n directly for any custom size.
 ```
+
+# Architecture ablation, repeat-3x: the single-run ReAct edge does not survive (2026-07-08)
+
+The single-run architecture ablation above ended with an explicit "not a decision" — ReAct was
+directionally ahead on accuracy and clearly cheaper on n=20/single-run, but CLAUDE.md's own rule
+("reliability evals repeat a subset 3-5x... never a single score") hadn't been applied to this
+specific comparison. `scripts/architecture_ablation.py` gained `--repeats` and `--variants` flags
+(same pass^k-style distribution machinery `eval/metrics/reliability.py` already provides) and this
+is that repeat.
+
+```bash
+python scripts/architecture_ablation.py --n 20 --seed 42 --repeats 3 \
+  --variants plan_first_pool4,react --database-url "$DATABASE_URL"
+```
+
+Dropped `plan_first_pool1` from this run — row 1 (parallelism) isn't in question here, only row 2
+(planning style); repeating a third variant would have added ~$0.16/~11 more minutes for a
+comparison this round wasn't measuring. Ran against local SQLite (Docker wasn't up at the time;
+this is a standalone ablation, not shared eval history, so the dev-loop swap is a non-issue).
+
+## Results (20q, MuSiQue, real Gemini 2.5 Flash, 3 repeats each)
+
+| Metric | `plan_first_pool4` | `react` |
+|---|---|---|
+| `answer_contains_gold` (mean ± stdev) | **0.533 ± 0.126** | 0.400 ± 0.050 |
+| per-repeat `contains_gold` | [0.65, 0.40, 0.55] | [0.35, 0.45, 0.40] |
+| `answer_f1` (mean ± stdev) | 0.0619 ± 0.0043 | 0.0646 ± 0.0018 |
+| all-consistent rate (per-variant) | 0.70 | 0.70 |
+| mean tokens/question | 8643 | **5232** |
+| mean cost/repeat (20q) | $0.109 | **$0.071** |
+| mean wall-clock/question | 32.5s | 24.8s |
+
+Full data: `results/architecture_ablation_20260708T0*.json` (SQLite run, not committed to the
+Postgres run store used elsewhere).
+
+## Reading this honestly
+
+**The single-run finding reverses.** The original n=20/single-run comparison had `react` ahead on
+`answer_contains_gold` (0.50 vs. 0.45). At 3 repeats, `plan_first_pool4` comes in **ahead by 13
+points** (0.533 vs. 0.400) — the opposite direction. This is exactly the failure mode CLAUDE.md's
+repeat-and-report-distribution rule exists to catch: a single run of a 20-question subset sits well
+within one repeat's worth of noise, and the original comparison happened to land on a favorable
+draw for react.
+
+**`plan_first_pool4`'s own repeat-to-repeat variance is large** (0.40, 0.55, 0.65 — a 25-point
+spread across 3 repeats of the *same* 20 questions, *same* config). This is real information, not
+just noise to explain away: coverage-driven replanning (row 2's bounded-replan mechanism) means
+plan-first's outcome on a given question depends on whether reflection judges coverage sufficient
+on a given pass, which can vary run to run even at fixed temperature/model. `react`'s narrower
+spread (0.35-0.45) is consistent with its simpler, non-replanning control flow. Both variants
+landed on an identical 0.70 all-consistent rate at the *per-question* level, though — so this isn't
+"react is more reliable," just "plan-first's mean is higher with wider swings."
+
+**`answer_f1` shows no real difference** (0.0619 vs. 0.0646, both well within the other's stdev) —
+consistent with the metric's own documented floor-bound / length-penalty issues (this doc's earlier
+section on raw `answer_f1` vs. `answer_f1_extracted`), not strong evidence either way.
+
+**Cost and tokens are the one finding that held up across both runs.** ReAct used ~40% fewer tokens
+and cost ~35% less in both the single-run and the repeat-3x measurement — a stable, structural
+result (one incremental decision call per query vs. plan-first's upfront decomposition), not an
+artifact of a lucky draw. Wall-clock, by contrast, flipped direction between the two runs (plan-first
+faster in the original, react faster here) — real-world API latency variance dominates a 20-40s/question
+gap on n=20 more than either architecture's own structural properties do; not a reliable
+differentiator either way with this sample size.
+
+**Verdict, directly answering DESIGN.md row 2's own stated reversal condition** ("if ReAct matches
+plan-first on accuracy... at lower cost, default switches"): ReAct does **not** match plan-first's
+accuracy here — it's 13 points behind on the properly-repeated measurement, a wider gap than its
+single-run *lead* was. **The default stays plan-first.** ReAct's real, repeat-confirmed cost/token
+advantage is worth keeping documented as a genuine tradeoff (cheaper, less accurate on this
+subset), not a reason to flip the default — row 2's own bar is accuracy parity *at* lower cost, and
+that bar isn't met.
+
+**What this doesn't test**: n=20 with 3 repeats is still a small sample for a 13-point gap with
+±12.6-point variance on one side — a 5-repeat run (CLAUDE.md's upper bound) or a larger n would
+narrow the confidence further, though the direction (plan-first ahead) is now the opposite of the
+original single-run result, which is itself the more load-bearing finding than the exact magnitude.
+No FRAMES-subset version of this same repeat-3x comparison exists yet (DESIGN.md §10's own flagged
+follow-up, still open).
+```
