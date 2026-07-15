@@ -2,10 +2,11 @@
 a realistic mixed pass (half-repeat/half-fresh), then a cache-disabled pass
 on the same questions to prove the bypass flag actually bypasses.
 
-Uses the real production CachedSearchBackend and RedisCache classes, fronting
-a network-latency-simulating fake Tavily backend — this sandbox has no live
-Tavily key/credits, so no real API calls are made. See docs/RESULTS.md for
-what that means for these numbers (failure-honesty section).
+Uses the real production CachedSearchBackend, RedisCache, and TavilyBackend
+classes throughout — every pass makes real Tavily search/fetch calls, so
+this costs real money (see RunConfig.search_cost_usd/fetch_cost_usd) and
+requires TAVILY_API_KEY to be set. No simulated backend, no fake latency —
+the numbers this produces are real measurements, not a mechanics rehearsal.
 
 Usage:
     python scripts/cache_measurement.py [--n 20] [--seed 42] [--fetches 3]
@@ -26,42 +27,21 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from deepresearch.backends.base import SearchBackend  # noqa: E402
 from deepresearch.backends.cached import CachedSearchBackend  # noqa: E402
+from deepresearch.backends.tavily import TavilyBackend  # noqa: E402
 from deepresearch.cache.redis_cache import RedisCache  # noqa: E402
 from deepresearch.config import RunConfig  # noqa: E402
-from deepresearch.schemas import FetchResult, SearchResult  # noqa: E402
 
 RESULTS_DIR = Path(__file__).parent.parent / "results"
 DATASET = "bdsaglam/musique"
 DATASET_CONFIG = "answerable"
 DATASET_SPLIT = "validation"
 
-
-class FakeTavilyBackend(SearchBackend):
-    """Simulated Tavily: realistic network latency, no live API calls —
-    this sandbox has no Tavily key/credits (docs/RESULTS.md honesty
-    section). CachedSearchBackend and RedisCache in front of it are the
-    unmodified production classes."""
-
-    def __init__(self, seed: int = 0) -> None:
-        self._rng = random.Random(seed)
-
-    async def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
-        await asyncio.sleep(self._rng.uniform(0.2, 0.4))
-        return [
-            SearchResult(
-                url=f"https://example.com/{abs(hash((query, i)))}",
-                title=f"Result {i}",
-                snippet="...",
-                score=1.0,
-            )
-            for i in range(max_results)
-        ]
-
-    async def fetch(self, url: str) -> FetchResult:
-        await asyncio.sleep(self._rng.uniform(0.15, 0.35))
-        return FetchResult(url=url, content=f"fetched content for {url}")
+if not os.environ.get("TAVILY_API_KEY"):
+    raise RuntimeError(
+        "TAVILY_API_KEY is not set. This script measures the cache layer against "
+        "the real Tavily backend — no simulated/fake backend fallback."
+    )
 
 
 def load_questions(n: int, seed: int) -> list[str]:
@@ -108,9 +88,8 @@ async def run_cached_pass(
     cache: RedisCache,
     config: RunConfig,
     fetches: int,
-    inner_seed: int,
+    inner: TavilyBackend,
 ) -> PassResult:
-    inner = FakeTavilyBackend(seed=inner_seed)
     backend = CachedSearchBackend(
         inner,
         cache,
@@ -148,11 +127,10 @@ async def run_cached_pass(
     )
 
 
-async def run_bypass_pass(name: str, questions: list[str], config: RunConfig, fetches: int, inner_seed: int) -> PassResult:
+async def run_bypass_pass(name: str, questions: list[str], config: RunConfig, fetches: int, inner: TavilyBackend) -> PassResult:
     """Same questions as the cold/warm passes, but with no cache at all —
     proves the DEEPRESEARCH_CACHE_ENABLED=false bypass flag actually
     bypasses (every call is a miss, no speedup, regardless of repeats)."""
-    inner = FakeTavilyBackend(seed=inner_seed)
     start = time.perf_counter()
     for q in questions:
         results = await inner.search(q, max_results=fetches)
@@ -180,20 +158,24 @@ async def main(n: int, seed: int, fetches: int) -> dict:
     config = RunConfig()
     redis_url = os.getenv("REDIS_URL", config.redis_url)
     cache, used_real_redis = await build_cache(redis_url)
+    inner = TavilyBackend()
 
     questions = load_questions(n, seed)
     fresh_questions = load_questions(n, seed=seed + 1000)  # disjoint sample
 
-    cold = await run_cached_pass("cold (empty cache)", questions, cache, config, fetches, inner_seed=1)
-    warm = await run_cached_pass("warm (same questions, repeated)", questions, cache, config, fetches, inner_seed=2)
+    try:
+        cold = await run_cached_pass("cold (empty cache)", questions, cache, config, fetches, inner)
+        warm = await run_cached_pass("warm (same questions, repeated)", questions, cache, config, fetches, inner)
 
-    half = n // 2
-    mixed_questions = questions[:half] + fresh_questions[: n - half]
-    mixed = await run_cached_pass(
-        "mixed (half repeat, half fresh)", mixed_questions, cache, config, fetches, inner_seed=3
-    )
+        half = n // 2
+        mixed_questions = questions[:half] + fresh_questions[: n - half]
+        mixed = await run_cached_pass(
+            "mixed (half repeat, half fresh)", mixed_questions, cache, config, fetches, inner
+        )
 
-    bypass = await run_bypass_pass("bypass (cache_enabled=false)", questions, config, fetches, inner_seed=4)
+        bypass = await run_bypass_pass("bypass (cache_enabled=false)", questions, config, fetches, inner)
+    finally:
+        await inner.aclose()
 
     return {
         "config": {
@@ -205,7 +187,7 @@ async def main(n: int, seed: int, fetches: int) -> dict:
             "search_cache_ttl_seconds": config.search_cache_ttl_seconds,
             "fetch_cache_ttl_seconds": config.fetch_cache_ttl_seconds,
             "used_real_redis": used_real_redis,
-            "backend": "FakeTavilyBackend (simulated latency, no live API calls)",
+            "backend": "TavilyBackend (real live API calls)",
         },
         "passes": [asdict(p) for p in (cold, warm, mixed, bypass)],
     }

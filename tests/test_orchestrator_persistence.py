@@ -9,8 +9,6 @@ from deepresearch.schemas import RunStatus
 from deepresearch.store import db
 from deepresearch.telemetry.otel_setup import init_telemetry
 
-from eval.fake_llm import FakeLLMClient
-
 DOCS = [
     {"doc_id": "d1", "title": "Paris", "text": "Paris is the capital of France and its largest city."},
     {"doc_id": "d2", "title": "Berlin", "text": "Berlin is the capital of Germany, known for its history."},
@@ -18,7 +16,7 @@ DOCS = [
 
 
 @pytest.mark.asyncio
-async def test_run_research_persists_runs_trajectories_and_tool_calls(tmp_path):
+async def test_run_research_persists_runs_trajectories_and_tool_calls(tmp_path, make_stub_llm):
     init_telemetry()
     db_url = f"sqlite+aiosqlite:///{tmp_path / 'orch_test.db'}"
 
@@ -28,7 +26,7 @@ async def test_run_research_persists_runs_trajectories_and_tool_calls(tmp_path):
         rerank_enabled=False,  # keep it fast — reranker model isn't the point of this test
     )
     backend = LocalCorpusBackend.from_dicts(DOCS)
-    llm = FakeLLMClient(seed=1)
+    llm = make_stub_llm(seed=1)
 
     result = await run_research("What is the capital of France?", config=config, search_backend=backend, llm=llm, benchmark_name="test")
 
@@ -59,7 +57,7 @@ async def test_run_research_persists_runs_trajectories_and_tool_calls(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_run_research_react_mode_persists_react_steps(tmp_path):
+async def test_run_research_react_mode_persists_react_steps(tmp_path, make_stub_llm):
     """docs/DESIGN.md decision row 2 alternative: no upfront "plan" stage,
     "react_step" stages instead, bounded by max_react_steps."""
     init_telemetry()
@@ -73,7 +71,7 @@ async def test_run_research_react_mode_persists_react_steps(tmp_path):
         max_react_steps=3,
     )
     backend = LocalCorpusBackend.from_dicts(DOCS)
-    llm = FakeLLMClient(seed=1)
+    llm = make_stub_llm(seed=1)
 
     result = await run_research(
         "What is the capital of France?", config=config, search_backend=backend, llm=llm, benchmark_name="test"
@@ -98,7 +96,7 @@ async def test_run_research_react_mode_persists_react_steps(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_run_research_on_event_fires_for_every_stage(tmp_path):
+async def test_run_research_on_event_fires_for_every_stage(tmp_path, make_stub_llm):
     """The SSE streaming endpoint (api/streaming.py) has no other hook into
     run_research()'s progress — on_event must fire once per _call_stage,
     in order, with the stages a plan-first run actually produces."""
@@ -106,7 +104,7 @@ async def test_run_research_on_event_fires_for_every_stage(tmp_path):
     db_url = f"sqlite+aiosqlite:///{tmp_path / 'orch_events_test.db'}"
     config = RunConfig(database_url=db_url, cache_enabled=False, rerank_enabled=False)
     backend = LocalCorpusBackend.from_dicts(DOCS)
-    llm = FakeLLMClient(seed=1)
+    llm = make_stub_llm(seed=1)
 
     events: list[dict] = []
 
@@ -130,12 +128,12 @@ async def test_run_research_on_event_fires_for_every_stage(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_run_research_bypass_cache_flag_means_no_stats(tmp_path):
+async def test_run_research_bypass_cache_flag_means_no_stats(tmp_path, make_stub_llm):
     init_telemetry()
     db_url = f"sqlite+aiosqlite:///{tmp_path / 'orch_test2.db'}"
     config = RunConfig(database_url=db_url, cache_enabled=False, rerank_enabled=False)
     backend = LocalCorpusBackend.from_dicts(DOCS)
-    llm = FakeLLMClient(seed=2)
+    llm = make_stub_llm(seed=2)
 
     result = await run_research("Capital of Germany?", config=config, search_backend=backend, llm=llm)
 
