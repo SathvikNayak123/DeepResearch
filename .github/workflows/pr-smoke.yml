@@ -20,33 +20,57 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      # Speeds up repeat runs — the bge-reranker-v2-m3 cross-encoder and the
-      # HF datasets (FRAMES/MuSiQue) are otherwise re-downloaded every run.
-      - name: Cache HF datasets/models
+      # Speeds up repeat runs — the HF datasets (FRAMES/MuSiQue) are
+      # otherwise re-downloaded every run.
+      - name: Cache HF datasets
         uses: actions/cache@v4
         with:
-          path: ~/.cache/huggingface
-          key: hf-cache-${{ runner.os }}
+          path: ~/.cache/huggingface/datasets
+          key: hf-datasets-${{ runner.os }}-v1
+
+      # Separate key/path from the dataset cache above: a cache *hit* never
+      # re-saves under the same key, so if this shared the datasets' key,
+      # the ~1GB reranker model would never actually land in the cache once
+      # that key already existed (silently cache-cold forever). Own key,
+      # own cache-write on first run.
+      - name: Cache reranker model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: bge-reranker-v2-m3-${{ runner.os }}-v1
 
       - name: Install deepresearch
         run: pip install -e ".[dev,eval]"
+
+      # Bounded, isolated warm-up: a cache hit above makes this a no-op
+      # (CrossEncoder() checks the local HF cache before hitting the network).
+      # A cache miss downloads for real — 10-minute timeout so a repeat of
+      # the 2026-07-02 stalled-download incident (runs #1/#2, hung 30+ min
+      # with no progress, manually cancelled — see docs/RESULTS.md) fails
+      # fast and legibly here instead of silently eating the job's full
+      # 90-minute budget deep inside the eval run.
+      - name: Warm reranker model cache
+        timeout-minutes: 10
+        run: python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAAI/bge-reranker-v2-m3')"
 
       # Real OpenRouter key required — eval/run_eval.py has no fake/stub LLM
       # fallback, per this project's own "every metric is real" premise.
       # Benchmarks still run against LocalCorpusBackend (no live Tavily
       # needed for FRAMES/MuSiQue); the corpus loaders separately reach the
       # public, unauthenticated HF Hub + Wikipedia APIs once to build the
-      # fixed local corpus (docs/DESIGN.md decision row 5.1).
-      # DEEPRESEARCH_RERANK_ENABLED=false: the bge-reranker-v2-m3 cross-encoder
-      # (~1GB) hung 30+ min downloading from the HF model hub on GitHub-hosted
-      # runners (runs #1/#2, 2026-07-02 — cancelled by hand, see docs/RESULTS.md).
-      # Safe no-op here: candidate_pool_size == rerank_top_k == 6, so disabling
-      # rerank selects the identical candidate set either way — zero effect on
-      # any gated metric, just removes the flaky download.
+      # fixed local corpus (docs/DESIGN.md decision row 5.1). Rerank runs ON
+      # (the config default) — results/ci_baseline.json was itself captured
+      # with rerank on, and disabling it here isn't the no-op it looks like:
+      # candidate_pool_size==rerank_top_k==6 counts *sources*, not chunks —
+      # worker.py chunks each source and caps at max_chunks_per_source (10),
+      # so up to 60 candidate chunks compete for rerank_top_k slots. With
+      # rerank off, `candidates[:6]` just takes the first source's chunks in
+      # fetch order, discarding the other ~5 sources — a real quality drop,
+      # not a saved download (confirmed: PR #7 measured frames.accuracy
+      # -20pts / citation_precision -25pts with rerank off vs. this baseline).
       - name: Run eval-smoke (local corpus)
         run: python -m eval.run_eval --mode smoke --database-url "sqlite+aiosqlite:///./ci_run.db"
         env:
-          DEEPRESEARCH_RERANK_ENABLED: "false"
           DEEPRESEARCH_LLM_PROVIDER: "openrouter"
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           DEEPRESEARCH_PLANNER_MODEL: "google/gemini-2.5-flash"
