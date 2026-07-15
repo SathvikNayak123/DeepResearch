@@ -37,7 +37,6 @@ from deepresearch.telemetry.otel_setup import init_telemetry  # noqa: E402
 
 from eval.benchmarks import frames as frames_bench  # noqa: E402
 from eval.benchmarks import musique as musique_bench  # noqa: E402
-from eval.fake_llm import FakeLLMClient  # noqa: E402
 from eval.judge import Judge, estimate_judge_cost_usd  # noqa: E402
 from eval.metrics.answer_f1 import best_answer_f1, gold_contained  # noqa: E402
 from eval.metrics.citation import compute_citation_metrics  # noqa: E402
@@ -54,19 +53,31 @@ RESULTS_DIR = Path(__file__).parent.parent / "results"
 ESTIMATED_AGENT_COST_PER_QUESTION_USD = 0.15
 
 
+_PROVIDER_REQUIRED_KEY = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    # bedrock has no single required env var — it authenticates via the
+    # ambient AWS credential chain (boto3), not a stored API key.
+}
+
+
 def make_llm() -> tuple[object, bool]:
-    """Returns (llm_client, is_real_llm). Falls back to FakeLLMClient with a
-    loud banner if ANTHROPIC_API_KEY isn't set, so the harness stays
-    runnable without live credentials — see docs/RESULTS.md for what that
-    means for any numbers produced this way."""
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return LLMClient(), True
-    print(
-        "\n*** No ANTHROPIC_API_KEY set - using FakeLLMClient. ***\n"
-        "*** Scores below are HARNESS VALIDATION, not a real model baseline. ***\n"
-        "*** See docs/RESULTS.md for what's real vs. simulated in this run. ***\n"
-    )
-    return FakeLLMClient(seed=0), False
+    """Returns (llm_client, is_real_llm) — always a real LLMClient. No
+    fake/stub fallback: docs/DESIGN.md's own premise ("every architectural
+    box has a metric attached") means an eval score must come from a real
+    model or not be produced at all. Fails loudly and immediately if the
+    configured provider's key is missing, instead of surfacing whatever
+    error the SDK happens to raise several calls deep."""
+    provider = os.environ.get("DEEPRESEARCH_LLM_PROVIDER", "anthropic")
+    required_key = _PROVIDER_REQUIRED_KEY.get(provider)
+    if required_key and not os.environ.get(required_key):
+        raise RuntimeError(
+            f"DEEPRESEARCH_LLM_PROVIDER={provider!r} requires {required_key} to be set. "
+            "eval.run_eval only runs against a real model — no fake/stub fallback. "
+            "Set the key (or point DEEPRESEARCH_LLM_PROVIDER at a provider you have "
+            "credentials for) before running."
+        )
+    return LLMClient(), True
 
 
 async def _run_one_question(

@@ -31,16 +31,12 @@ jobs:
       - name: Install deepresearch
         run: pip install -e ".[dev,eval]"
 
-      # No ANTHROPIC_API_KEY/TAVILY_API_KEY secret is set here on purpose —
-      # eval/run_eval.py's make_llm() falls back to FakeLLMClient
-      # automatically (loud banner in the log) so PR-smoke never needs a
-      # paid key or judge-cost budget, per this session's brief ("no
-      # external APIs in CI; judge calls cached/stubbed per design"). The
-      # benchmark corpus loaders still reach the public, unauthenticated HF
-      # Hub + Wikipedia APIs once to build the fixed local corpus
-      # (docs/DESIGN.md decision row 5.1) — that's a one-time reproducible
-      # ingestion step, not the paid/keyed vendor API this gate exists to
-      # keep out of CI.
+      # Real OpenRouter key required — eval/run_eval.py has no fake/stub LLM
+      # fallback, per this project's own "every metric is real" premise.
+      # Benchmarks still run against LocalCorpusBackend (no live Tavily
+      # needed for FRAMES/MuSiQue); the corpus loaders separately reach the
+      # public, unauthenticated HF Hub + Wikipedia APIs once to build the
+      # fixed local corpus (docs/DESIGN.md decision row 5.1).
       # DEEPRESEARCH_RERANK_ENABLED=false: the bge-reranker-v2-m3 cross-encoder
       # (~1GB) hung 30+ min downloading from the HF model hub on GitHub-hosted
       # runners (runs #1/#2, 2026-07-02 — cancelled by hand, see docs/RESULTS.md).
@@ -51,6 +47,13 @@ jobs:
         run: python -m eval.run_eval --mode smoke --database-url "sqlite+aiosqlite:///./ci_run.db"
         env:
           DEEPRESEARCH_RERANK_ENABLED: "false"
+          DEEPRESEARCH_LLM_PROVIDER: "openrouter"
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DEEPRESEARCH_PLANNER_MODEL: "google/gemini-2.5-flash"
+          DEEPRESEARCH_WORKER_MODEL: "google/gemini-2.5-flash"
+          DEEPRESEARCH_REFLECTION_MODEL: "google/gemini-2.5-flash"
+          DEEPRESEARCH_SYNTHESIS_MODEL: "google/gemini-2.5-flash"
+          DEEPRESEARCH_JUDGE_MODEL: "google/gemini-2.5-flash-lite"
 
       - name: CI regression gate
         id: gate

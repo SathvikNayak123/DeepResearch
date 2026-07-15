@@ -40,15 +40,14 @@ _QUALITY_METRICS = {
 }
 _COST_BENCHMARKS = ["frames", "musique"]
 # docs/DESIGN.md §5.2's own agentic metric ("did the run finish inside
-# budget with a synthesized report") — gated here too, not just reported,
-# because it's the one axis a real code regression can move deterministically
-# regardless of LLM backend. frames.accuracy/citation_precision are scored by
-# a judge that (under the FakeLLMClient fallback used when no API key is
-# configured) returns a verdict independent of the run's actual content, and
-# musique.answer_f1's own baseline sits too close to its floor for a 3-point
-# absolute tolerance to ever fire under that same fallback — see docs/RESULTS.md
-# for the measurement that surfaced this gap. completion_rate has no such
-# blind spot: it's a plain fraction of `runs.status == "completed"`.
+# budget with a synthesized report") — gated here too, not just reported.
+# Originally added specifically because CI ran with no LLM key against a
+# fake stand-in whose judge verdicts were independent of run content, so
+# task_completion_rate was the only axis a real code regression could move
+# (see docs/RESULTS.md). CI now runs against a real model (no fake/stub
+# fallback exists anymore), so accuracy/citation_precision/answer_f1 are
+# real signal too — kept as a gated metric regardless, since "did the run
+# finish" is a legitimate agentic metric on its own merits.
 _COMPLETION_BENCHMARKS = ["frames", "musique"]
 
 # Session brief's literal tolerances (tighter than CLAUDE.md's placeholder
