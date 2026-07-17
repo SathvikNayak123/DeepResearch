@@ -1,8 +1,12 @@
 name: Nightly Full Eval
 
 on:
-  schedule:
-    - cron: "0 7 * * *" # 07:00 UTC daily
+  # schedule disabled 2026-07-17: daily FRAMES-full + MuSiQue-full runs (up to
+  # 360min each, real LLM calls) were too costly to run unattended every night.
+  # Trigger manually via workflow_dispatch, or re-enable the cron below once
+  # cost is under control.
+  # schedule:
+  #   - cron: "0 7 * * *" # 07:00 UTC daily
   workflow_dispatch: {}
 
 permissions:
