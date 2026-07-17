@@ -92,11 +92,42 @@ def test_check_regression_tolerances(key, baseline_value, current_value, expect_
 
 
 def test_render_gate_table_reports_failures_and_skips_missing_metrics():
-    baseline = {"frames.accuracy": 0.70, "frames.citation_precision": 0.70, "musique.answer_f1": 0.02}
-    current = {"frames.accuracy": 0.60, "frames.citation_precision": 0.70}  # accuracy regressed, musique missing
+    baseline = {
+        "frames.task_completion_rate": 1.0,
+        "frames.citation_precision": 0.70,
+        "musique.answer_f1": 0.02,
+    }
+    current = {
+        "frames.task_completion_rate": 0.90,  # gated metric, regressed
+        "frames.citation_precision": 0.70,
+    }  # musique.answer_f1 missing from current
 
     table, failures = render_gate_table(baseline, current)
 
     assert len(failures) == 1
-    assert "frames.accuracy" in failures[0]
+    assert "frames.task_completion_rate" in failures[0]
     assert "SKIPPED" in table  # musique.answer_f1 present only in baseline
+
+
+def test_render_gate_table_does_not_fail_on_informational_only_regression():
+    """accuracy/citation-precision/answer_f1* are measured and shown every
+    PR but don't gate PR-smoke — see INFORMATIONAL_ONLY_METRICS's comment
+    for why a flat tolerance can't survive their measured single-run noise."""
+    baseline = {"frames.accuracy": 0.70, "musique.answer_f1_extracted": 0.50}
+    current = {"frames.accuracy": 0.40, "musique.answer_f1_extracted": 0.20}  # both regress hard
+
+    table, failures = render_gate_table(baseline, current)
+
+    assert failures == []
+    assert "INFO (not gated on PR-smoke)" in table
+    assert "FAIL" not in table
+
+
+def test_render_gate_table_still_fails_on_gated_cost_regression():
+    baseline = {"musique.cost_per_query_usd": 0.10}
+    current = {"musique.cost_per_query_usd": 0.20}  # +100%, over the 25% tolerance
+
+    table, failures = render_gate_table(baseline, current)
+
+    assert len(failures) == 1
+    assert "musique.cost_per_query_usd" in failures[0]

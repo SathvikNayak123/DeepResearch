@@ -42,14 +42,24 @@ that's already in that table — extend it if new evidence arrives.
 
 ## Eval thresholds
 
-Initial gating thresholds — placeholders until the first real baseline lands in
-`ci_baselines`, then tune against measured variance rather than guessing:
+Tuned against a real measured baseline and real measured single-run variance
+(`docs/RESULTS.md`), not the original placeholders:
 
-- PR smoke gate fails if, vs. stored baseline: FRAMES-20 or MuSiQue-20 accuracy
-  drops >5 points absolute, citation precision drops >5 points, or p95 latency
-  regresses >30%.
+- PR smoke gate (`scripts/ci_gate.py`) actually *fails* the check only on
+  structurally low-variance metrics: `cost_per_query_usd` (+25% relative) and
+  `task_completion_rate` (-3pts absolute). `accuracy` / `citation_precision` /
+  `answer_f1*` are computed and shown in the PR comment every run, but do not
+  fail the check — the repeat-3x architecture ablation measured single-run
+  noise up to ~17-25 points on this exact metric family at n=20, past any
+  flat tolerance that could both survive that noise and still catch a real
+  regression of similar size (see `eval/ci_baseline.py`'s
+  `INFORMATIONAL_ONLY_METRICS`). Real regressions on those metrics are meant
+  to be caught by the nightly variance-aware policy below instead, once it's
+  built against a real distribution rather than a single point.
 - Nightly full suite: no auto-gate, but any metric outside ±1 stdev of the last
-  5 nightly runs gets flagged in the artifact for manual review.
+  5 nightly runs should be flagged in the artifact for manual review — not yet
+  implemented (nightly currently only refreshes the baseline on green); a
+  flagged follow-up now that PR-smoke runs a real model.
 - Reliability: a 20-question subset must show an all-runs-consistent (pass^k) rate
   reported alongside every accuracy number — an accuracy figure without it is
   incomplete and should not be cited on its own.
