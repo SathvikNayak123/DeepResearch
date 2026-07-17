@@ -9,12 +9,16 @@ permissions:
   contents: write # commits the refreshed baseline on green
 
 jobs:
-  eval-full:
+  # FRAMES-100 with rerank on is the dominant wall-clock cost by a wide
+  # margin — full Wikipedia articles chunk into dozens of candidates per
+  # source vs. MuSiQue's pre-chunked short paragraphs (docs/RESULTS.md).
+  # Split into its own job/runner so it gets the full 360min GH-hosted
+  # ceiling to itself, instead of sharing one job's timeout with MuSiQue
+  # and the reliability job — the combined single-job version measured
+  # over 5h and was killed by the timeout twice before this split.
+  eval-frames-full:
     runs-on: ubuntu-latest
-    # Bumped from 240: rerank now runs ON (see below), and RESULTS.md's own
-    # measured FRAMES-100 wall-clock with rerank on was ~2.57h alone, before
-    # MuSiQue-100 and the reliability job — 240min was too tight a margin.
-    timeout-minutes: 300
+    timeout-minutes: 360 # GitHub-hosted runner hard cap; see comment above
     steps:
       - uses: actions/checkout@v4
 
@@ -29,9 +33,6 @@ jobs:
           path: ~/.cache/huggingface/datasets
           key: hf-datasets-${{ runner.os }}-v1
 
-      # Own key/path, separate from the dataset cache — see pr-smoke.yml's
-      # identical comment for why sharing a key silently prevents this from
-      # ever actually getting cached.
       - name: Cache reranker model
         uses: actions/cache@v4
         with:
@@ -45,11 +46,62 @@ jobs:
         timeout-minutes: 10
         run: python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAAI/bge-reranker-v2-m3')"
 
-      # Real OpenRouter key required — no fake/stub LLM fallback (see
-      # pr-smoke.yml). Rerank runs ON (the config default) — see pr-smoke.yml's
-      # comment for why disabling it isn't the no-op the old comment claimed.
-      - name: Run eval-full (100q FRAMES + 100q MuSiQue, local corpus)
-        run: python -m eval.run_eval --mode full --database-url "sqlite+aiosqlite:///./nightly_run.db"
+      - name: Run eval-full (100q FRAMES, local corpus)
+        run: python -m eval.run_eval --benchmark frames --n 100 --seed 42 --database-url "sqlite+aiosqlite:///./frames_full.db"
+        env:
+          DEEPRESEARCH_LLM_PROVIDER: "openrouter"
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DEEPRESEARCH_PLANNER_MODEL: "google/gemini-2.5-flash"
+          DEEPRESEARCH_WORKER_MODEL: "google/gemini-2.5-flash"
+          DEEPRESEARCH_REFLECTION_MODEL: "google/gemini-2.5-flash"
+          DEEPRESEARCH_SYNTHESIS_MODEL: "google/gemini-2.5-flash"
+          DEEPRESEARCH_JUDGE_MODEL: "google/gemini-2.5-flash-lite"
+
+      - name: Upload frames-full artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frames-full
+          path: |
+            frames_full.db
+            results/*.json
+
+  # MuSiQue-100 + the reliability job (20q x 3 repeats, also MuSiQue) share
+  # this job — both are fast relative to FRAMES (docs/RESULTS.md), and
+  # bundling the reliability job here (rather than a third parallel job)
+  # keeps it simple since it draws from the same benchmark/corpus.
+  eval-musique-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Cache HF datasets
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/datasets
+          key: hf-datasets-${{ runner.os }}-v1
+
+      - name: Cache reranker model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: bge-reranker-v2-m3-${{ runner.os }}-v1
+
+      - name: Install deepresearch
+        run: pip install -e ".[dev,eval]"
+
+      - name: Warm reranker model cache
+        timeout-minutes: 10
+        run: python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAAI/bge-reranker-v2-m3')"
+
+      - name: Run eval-full (100q MuSiQue, local corpus)
+        run: python -m eval.run_eval --benchmark musique --n 100 --seed 42 --database-url "sqlite+aiosqlite:///./musique_full.db"
         env:
           DEEPRESEARCH_LLM_PROVIDER: "openrouter"
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -63,7 +115,7 @@ jobs:
       # (pass^k) rate reported alongside every accuracy number" — never cite
       # nightly's accuracy figures without this.
       - name: Run reliability job (20q x 3 repeats)
-        run: python -m eval.run_eval --reliability --n 20 --repeats 3 --database-url "sqlite+aiosqlite:///./nightly_run.db"
+        run: python -m eval.run_eval --reliability --n 20 --repeats 3 --database-url "sqlite+aiosqlite:///./musique_full.db"
         env:
           DEEPRESEARCH_LLM_PROVIDER: "openrouter"
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -73,22 +125,63 @@ jobs:
           DEEPRESEARCH_SYNTHESIS_MODEL: "google/gemini-2.5-flash"
           DEEPRESEARCH_JUDGE_MODEL: "google/gemini-2.5-flash-lite"
 
-      - name: Upload metric-table artifact
+      - name: Upload musique-full artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nightly-results
-          path: results/*.json
+          name: musique-full
+          path: |
+            musique_full.db
+            results/*.json
+
+  # Runs regardless of whether either eval job succeeded (if: always()) so
+  # partial results/artifacts are still visible — dump_ci_baseline.py's own
+  # all-green check (across both databases) is what actually decides
+  # whether the baseline gets refreshed, matching CLAUDE.md's "no auto-gate,
+  # never silently lower the bar" nightly policy.
+  finalize:
+    needs: [eval-frames-full, eval-musique-full]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install deepresearch
+        run: pip install -e ".[dev,eval]"
+
+      - name: Download frames-full artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: frames-full
+          path: frames-full
+
+      - name: Download musique-full artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: musique-full
+          path: musique-full
 
       # docs/DESIGN.md §6 / CLAUDE.md: "nightly: no auto-gate ... updates the
-      # baseline only on green." Exit 1 here means at least one run this
-      # session didn't finish with status=completed — the job stays green
-      # either way (no auto-gate), but the baseline commit is skipped so a
-      # crashed/budget-exceeded nightly can't quietly lower the bar for
-      # every future PR.
+      # baseline only on green." Exit 1 here means at least one run across
+      # either database didn't finish with status=completed (or a database
+      # is missing entirely because its job crashed before uploading) — the
+      # job stays green either way (no auto-gate), but the baseline commit
+      # is skipped so a crashed/budget-exceeded/timed-out nightly can't
+      # quietly lower the bar for every future PR.
       - name: Refresh baseline (only writes it if every run completed cleanly)
         id: refresh
-        run: python scripts/dump_ci_baseline.py --database-url "sqlite+aiosqlite:///./nightly_run.db"
+        run: >
+          python scripts/dump_ci_baseline.py
+          --database-url "sqlite+aiosqlite:///./frames-full/frames_full.db"
+          --database-url "sqlite+aiosqlite:///./musique-full/musique_full.db"
         continue-on-error: true
 
       - name: Commit updated baseline
