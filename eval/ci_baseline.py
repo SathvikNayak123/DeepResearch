@@ -11,6 +11,11 @@ metric value + producing config), just persisted in git. A real deployment
 with a persistent CI database could swap this for `db.get_latest_ci_baseline`
 directly; that function already exists and is unit-tested (tests/test_store.py)
 for exactly that future swap.
+
+Not every tracked metric actually gates PR-smoke — see
+INFORMATIONAL_ONLY_METRICS below for which ones are measured/reported every
+PR but don't fail the check, and why a flat point-tolerance can't gate them
+meaningfully at n=20/single-run.
 """
 
 from __future__ import annotations
@@ -56,6 +61,21 @@ _COMPLETION_BENCHMARKS = ["frames", "musique"]
 # "placeholders until the first real baseline lands").
 ACCURACY_DROP_TOLERANCE = 0.03  # 3 points absolute
 COST_INCREASE_TOLERANCE = 0.25  # 25% relative
+
+# Quality metrics measured (and shown every PR), but not gated, on PR-smoke.
+# PR #7's first real (post-FakeLLMClient-removal) run measured single-run
+# noise on this exact metric family up to ~17-25 points at n=20 (repeat-3x
+# architecture ablation, docs/RESULTS.md) — a flat point-tolerance can't be
+# set below that noise floor without also firing on every PR, and can't be
+# set above it without going blind to a real regression of similar size.
+# cost_per_query_usd/task_completion_rate stay gated: both are structurally
+# low-variance (near-deterministic given a fixed question set and provider)
+# and passed clean across every real run so far, fake-client era included.
+# The real fix is nightly's own variance-aware policy (CLAUDE.md: "±1 stdev
+# of the last 5 nightly runs") gating on a measured distribution instead of
+# a single point — not built yet (needs a few more real nightly baselines
+# to compute a trustworthy stdev from first), tracked as a follow-up.
+INFORMATIONAL_ONLY_METRICS = frozenset(_QUALITY_METRICS.values())
 
 
 async def compute_current_metrics(database_url: str) -> dict[str, float]:
@@ -141,7 +161,10 @@ def check_regression(key: str, baseline_value: float, current_value: float) -> s
 
 def render_gate_table(baseline_metrics: dict, current_metrics: dict) -> tuple[str, list[str]]:
     """Returns (markdown_table, failure_reasons) — failure_reasons is empty
-    iff every metric present on both sides is within tolerance."""
+    iff every *gated* metric present on both sides is within tolerance.
+    INFORMATIONAL_ONLY_METRICS are still computed, compared, and shown in
+    the table (so drift stays visible every PR) but never contribute to
+    failure_reasons — see that constant's comment for why."""
     lines = ["| Metric | Baseline | Current | Delta | Status |", "|---|---|---|---|---|"]
     failures = []
     all_keys = sorted(set(baseline_metrics) | set(current_metrics))
@@ -160,8 +183,12 @@ def render_gate_table(baseline_metrics: dict, current_metrics: dict) -> tuple[st
         reason = check_regression(key, baseline_value, current_value)
         delta = current_value - baseline_value
         delta_str = f"{delta:+.4f}" if is_cost_metric(key) else f"{delta:+.3f}"
-        status = f"FAIL: {reason}" if reason else "OK"
-        if reason:
+        if not reason:
+            status = "OK"
+        elif key in INFORMATIONAL_ONLY_METRICS:
+            status = f"INFO (not gated on PR-smoke): {reason}"
+        else:
+            status = f"FAIL: {reason}"
             failures.append(f"`{key}`: {reason}")
         lines.append(
             f"| `{key}` | {fmt_metric(key, baseline_value)} | {fmt_metric(key, current_value)} | "

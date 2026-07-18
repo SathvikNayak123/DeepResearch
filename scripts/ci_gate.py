@@ -2,11 +2,14 @@
 
 Compares the metrics from a just-finished eval-smoke run (in --database-url)
 against the checked-in baseline (--baseline, default results/ci_baseline.json)
-and fails (exit 1) if any tracked metric regresses beyond tolerance —
-accuracy/citation-precision/answer_f1 (-3pts), cost per query (+25%), and
-task_completion_rate (-3pts — see eval/ci_baseline.py's module comment for
-its history). CI runs against a real model (no fake/stub LLM fallback), so
-every one of these is real signal. See eval/ci_baseline.py for the
+and fails (exit 1) if a *gated* metric regresses beyond tolerance —
+cost per query (+25%) and task_completion_rate (-3pts): both structurally
+low-variance, safe to gate on a single n=20 run. accuracy/citation-precision/
+answer_f1* are measured and shown in the table every PR, but not gated —
+PR #7's real (post-FakeLLMClient-removal) run measured single-run noise on
+that metric family up to ~17-25 points at n=20, well past any tolerance that
+could still catch a real regression of similar size. See
+eval/ci_baseline.py's INFORMATIONAL_ONLY_METRICS for the full reasoning and
 tolerances and the comparison/rendering logic itself (kept there, not here,
 so it's importable and unit-tested without shelling out —
 tests/test_ci_baseline.py).
