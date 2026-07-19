@@ -42,6 +42,15 @@ data/corpus/*
 # first run) — a large regenerable model artifact, never a source deliverable.
 .cache/
 
+# results/ holds per-run eval outputs (config-next-to-result), written on
+# every eval invocation — kept out of the repo. The two exceptions are the
+# CI gate's committed inputs: ci_baseline.json (what pr-smoke compares
+# against, refreshed by nightly) and ci_gate_comment.md (the gate's rendered
+# comment). Everything else here is a local/dev evidence artifact.
+results/*
+!results/ci_baseline.json
+!results/ci_gate_comment.md
+
 # Terraform: state/plan binaries and real secrets never belong in git.
 # docs/proof/plan.txt is a redacted *text* export, committed deliberately.
 infra/.terraform/

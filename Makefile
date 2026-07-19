@@ -1,4 +1,4 @@
-.PHONY: up down test demo migrate eval-smoke eval-full eval-reliability eval-drb ci-gate dump-baseline ablation logs
+.PHONY: up down test eval-smoke eval-full eval-reliability eval-drb ci-gate dump-baseline logs
 
 up:
 	docker compose up --build -d
@@ -8,14 +8,6 @@ down:
 
 test:
 	pytest -q
-
-# 3 hand-picked live questions through the real Tavily backend — a sanity
-# check of the live agent path, distinct from the benchmark harness below.
-demo:
-	python scripts/eval_smoke.py
-
-migrate:
-	python scripts/migrate.py
 
 # ~20 questions per benchmark (FRAMES + MuSiQue), local corpus, writes
 # scored eval_scores rows to the run store (Postgres/SQLite per DATABASE_URL).
@@ -35,11 +27,6 @@ eval-reliability:
 # --confirm. docs/DESIGN.md decision row 11 — not nightly-affordable.
 eval-drb:
 	python -m eval.benchmarks.deepresearch_bench --mode weekly
-
-# Plan-first vs. ReAct + worker-pool-size sweep (docs/DESIGN.md §10 addendum,
-# decision rows 1-2). Run once and recorded — not part of the PR/nightly gate.
-ablation:
-	python scripts/architecture_ablation.py --n 20 --seed 42
 
 # Compares a just-finished eval-smoke run against results/ci_baseline.json;
 # what .github/workflows/pr-smoke.yml invokes after eval-smoke.
