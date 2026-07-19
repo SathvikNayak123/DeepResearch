@@ -98,7 +98,7 @@ async def _run_one_question(
     return await run_research(question, config=config, search_backend=backend, llm=llm, benchmark_name=benchmark_name)
 
 
-async def run_musique(n: int, seed: int, *, database_url: str) -> dict:
+async def run_musique(n: int, seed: int, *, database_url: str, max_total_cost_usd: float | None = None) -> dict:
     examples = musique_bench.load_subset(n, seed)
     llm, is_real = make_llm()
 
@@ -108,21 +108,53 @@ async def run_musique(n: int, seed: int, *, database_url: str) -> dict:
     judge_config = RunConfig(database_url=database_url)
     judge = Judge(llm, judge_config)
 
-    print(f"[musique] {len(examples)} questions. Estimated agent cost: "
-          f"${len(examples) * ESTIMATED_AGENT_COST_PER_QUESTION_USD:.2f} "
-          f"+ extraction ~${estimate_judge_cost_usd(len(examples), judge_config.judge_model):.4f} "
+    # Resume support: skip questions this exact database_url already has a
+    # real score for, so re-invoking with the same --n/--seed after an
+    # interruption doesn't re-run (and re-charge real LLM cost for)
+    # already-completed questions -- load_subset() is deterministic, so a
+    # naive re-run would reprocess the same prefix every time.
+    already_scored = await db.get_scored_question_ids(database_url, "musique")
+    todo = [ex for ex in examples if ex.question_id not in already_scored]
+    if len(todo) < len(examples):
+        print(f"[musique] resuming: {len(examples) - len(todo)} of {len(examples)} already scored, skipping those")
+
+    print(f"[musique] {len(todo)} questions to run. Estimated agent cost: "
+          f"${len(todo) * ESTIMATED_AGENT_COST_PER_QUESTION_USD:.2f} "
+          f"+ extraction ~${estimate_judge_cost_usd(len(todo), judge_config.judge_model):.4f} "
           f"({judge_config.judge_model}) — MuSiQue is scored by Answer F1 (string-based) "
           f"both against the raw report and against an extracted short answer")
 
     results = []
     scores_rows = []
     tool_calls_by_run: dict[str, list[dict]] = {}
+    failed_question_ids: list[str] = []
     start = time.monotonic()
 
-    for ex in examples:
-        result = await _run_one_question(
-            ex.question, ex.corpus_path, database_url=database_url, llm=llm, benchmark_name="musique"
-        )
+    for ex in todo:
+        if max_total_cost_usd is not None:
+            spent = await db.get_total_cost_usd(database_url)
+            if spent >= max_total_cost_usd:
+                print(f"[musique] stopping: cumulative spend ${spent:.4f} >= cap ${max_total_cost_usd:.2f} "
+                      f"({len(examples) - len(results) - len(failed_question_ids)} questions not attempted)")
+                break
+
+        # One question's exception must not discard every question after it
+        # in the batch (confirmed live: a real FRAMES question's planner
+        # over-generated a plan, PlanValidationError propagated uncaught all
+        # the way to the top of run_research(), and killed an n=30 run after
+        # only 19 questions -- with n=100+ runs costing hours, losing the
+        # whole remaining batch over one question is exactly the failure
+        # mode this must not have). Already-flushed scores for prior
+        # questions are unaffected either way (see the per-question flush
+        # below); this addresses the batch *continuing*, not data survival.
+        try:
+            result = await _run_one_question(
+                ex.question, ex.corpus_path, database_url=database_url, llm=llm, benchmark_name="musique"
+            )
+        except Exception as exc:
+            print(f"[musique] question {ex.question_id} failed, skipping: {exc!r}")
+            failed_question_ids.append(ex.question_id)
+            continue
         results.append(result)
 
         predicted = result.report.text if result.report else ""
@@ -151,7 +183,10 @@ async def run_musique(n: int, seed: int, *, database_url: str) -> dict:
 
     return {
         "benchmark": "musique",
-        "n": len(examples),
+        "n_target": len(examples),
+        "n": len(todo),  # what THIS invocation ran -- matches wall_clock/cost below
+        "n_failed": len(failed_question_ids),
+        "failed_question_ids": failed_question_ids,
         "is_real_llm": is_real,
         "wall_clock_seconds": elapsed,
         "mean_answer_f1": _mean(scores_rows, "answer_f1"),
@@ -165,7 +200,7 @@ async def run_musique(n: int, seed: int, *, database_url: str) -> dict:
     }
 
 
-async def run_frames(n: int, seed: int, *, database_url: str) -> dict:
+async def run_frames(n: int, seed: int, *, database_url: str, max_total_cost_usd: float | None = None) -> dict:
     rows = frames_bench.load_subset(n, seed)
     to_fetch = frames_bench.estimate_articles_to_fetch(rows)
     print(f"[frames] {len(rows)} questions selected. Will fetch ~{to_fetch} new Wikipedia "
@@ -176,9 +211,15 @@ async def run_frames(n: int, seed: int, *, database_url: str) -> dict:
     judge_config = RunConfig(database_url=database_url)
     judge = Judge(llm, judge_config)
 
-    est_judge_calls = len(examples) * 2  # accuracy + ~1 citation check on average, rough
+    # Resume support — see run_musique's identical comment.
+    already_scored = await db.get_scored_question_ids(database_url, "frames")
+    todo = [ex for ex in examples if ex.example_id not in already_scored]
+    if len(todo) < len(examples):
+        print(f"[frames] resuming: {len(examples) - len(todo)} of {len(examples)} already scored, skipping those")
+
+    est_judge_calls = len(todo) * 2  # accuracy + ~1 citation check on average, rough
     print(
-        f"[frames] Estimated cost: agent ~${len(examples) * ESTIMATED_AGENT_COST_PER_QUESTION_USD:.2f} "
+        f"[frames] {len(todo)} questions to run. Estimated cost: agent ~${len(todo) * ESTIMATED_AGENT_COST_PER_QUESTION_USD:.2f} "
         f"+ judge ~${estimate_judge_cost_usd(est_judge_calls, judge_config.judge_model):.4f} "
         f"({judge_config.judge_model})"
     )
@@ -186,12 +227,27 @@ async def run_frames(n: int, seed: int, *, database_url: str) -> dict:
     results = []
     scores_rows = []
     tool_calls_by_run: dict[str, list[dict]] = {}
+    failed_question_ids: list[str] = []
     start = time.monotonic()
 
-    for ex in examples:
-        result = await _run_one_question(
-            ex.question, ex.corpus_path, database_url=database_url, llm=llm, benchmark_name="frames"
-        )
+    for ex in todo:
+        if max_total_cost_usd is not None:
+            spent = await db.get_total_cost_usd(database_url)
+            if spent >= max_total_cost_usd:
+                print(f"[frames] stopping: cumulative spend ${spent:.4f} >= cap ${max_total_cost_usd:.2f} "
+                      f"({len(examples) - len(results) - len(failed_question_ids)} questions not attempted)")
+                break
+
+        # See run_musique's identical try/except for why: one question's
+        # exception must not discard every question after it in the batch.
+        try:
+            result = await _run_one_question(
+                ex.question, ex.corpus_path, database_url=database_url, llm=llm, benchmark_name="frames"
+            )
+        except Exception as exc:
+            print(f"[frames] question {ex.example_id} failed, skipping: {exc!r}")
+            failed_question_ids.append(ex.example_id)
+            continue
         results.append(result)
 
         predicted = result.report.text if result.report else ""
@@ -225,7 +281,10 @@ async def run_frames(n: int, seed: int, *, database_url: str) -> dict:
 
     return {
         "benchmark": "frames",
-        "n": len(examples),
+        "n_target": len(examples),
+        "n": len(todo),  # what THIS invocation ran -- matches wall_clock/cost below
+        "n_failed": len(failed_question_ids),
+        "failed_question_ids": failed_question_ids,
         "is_real_llm": is_real,
         "wall_clock_seconds": elapsed,
         "mean_accuracy": _mean(scores_rows, "accuracy"),
@@ -321,6 +380,12 @@ async def _main() -> None:
     parser.add_argument("--reliability", action="store_true")
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--database-url", type=str, default=None)
+    parser.add_argument(
+        "--max-total-cost-usd", type=float, default=None,
+        help="Stop starting new questions once cumulative real spend in this database_url (across benchmarks/"
+             "invocations) reaches this. Checked against actual measured cost per question, not the upfront "
+             "estimate -- a hard safety cap, not a projection.",
+    )
     args = parser.parse_args()
 
     init_telemetry()
@@ -338,9 +403,13 @@ async def _main() -> None:
     summaries = {}
     for name in benchmarks:
         if name == "frames":
-            summaries["frames"] = await run_frames(n, args.seed, database_url=database_url)
+            summaries["frames"] = await run_frames(
+                n, args.seed, database_url=database_url, max_total_cost_usd=args.max_total_cost_usd
+            )
         else:
-            summaries["musique"] = await run_musique(n, args.seed, database_url=database_url)
+            summaries["musique"] = await run_musique(
+                n, args.seed, database_url=database_url, max_total_cost_usd=args.max_total_cost_usd
+            )
 
     _write_and_print(args.mode or "custom", summaries)
 

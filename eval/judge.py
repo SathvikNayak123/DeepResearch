@@ -12,38 +12,27 @@ from __future__ import annotations
 
 import hashlib
 
+from pydantic import BaseModel
+
 from deepresearch.config import RunConfig
 from deepresearch.llm.client import COST_PER_MTOK_USD, LLMClient
 from deepresearch.store import db
 
 from eval.prompts.loader import load_eval_prompt
 
-ACCURACY_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "correct": {"type": "boolean"},
-        "rationale": {"type": "string"},
-    },
-    "required": ["correct", "rationale"],
-    "additionalProperties": False,
-}
 
-CITATION_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "supported": {"type": "boolean"},
-        "rationale": {"type": "string"},
-    },
-    "required": ["supported", "rationale"],
-    "additionalProperties": False,
-}
+class AccuracyVerdict(BaseModel):
+    correct: bool
+    rationale: str
 
-SHORT_ANSWER_SCHEMA = {
-    "type": "object",
-    "properties": {"short_answer": {"type": "string"}},
-    "required": ["short_answer"],
-    "additionalProperties": False,
-}
+
+class CitationVerdict(BaseModel):
+    supported: bool
+    rationale: str
+
+
+class ShortAnswer(BaseModel):
+    short_answer: str
 
 # Planning estimate for cost-before-running printouts (task 5) — not a
 # measured average. Refine once eval_scores/judge_cache rows give real usage
@@ -86,11 +75,11 @@ class Judge:
 
         system = load_eval_prompt("judge_accuracy_v1.txt")
         user_content = f"Question: {question}\nGold answer: {gold_answer}\nPredicted answer: {predicted_answer}"
-        data, usage = await self._llm.complete_json(
+        data, usage = await self._llm.complete_structured(
             model=self._config.judge_model,
             system=system,
             user_content=user_content,
-            schema=ACCURACY_SCHEMA,
+            response_model=AccuracyVerdict,
             max_tokens=256,
         )
         self.calls_made += 1
@@ -98,11 +87,11 @@ class Judge:
         await db.set_judge_cache(
             self._config.database_url,
             cache_key=cache_key,
-            verdict=data,
+            verdict=data.model_dump(),
             judge_model=self._config.judge_model,
             rubric_version=self._config.judge_rubric_version,
         )
-        return data["correct"], data["rationale"], False
+        return data.correct, data.rationale, False
 
     async def extract_short_answer(self, *, question: str, report_text: str) -> tuple[str, bool]:
         """Returns (short_answer, was_cache_hit).
@@ -128,11 +117,11 @@ class Judge:
 
         system = load_eval_prompt("extract_answer_v1.txt")
         user_content = f"Question: {question}\n\nFull report:\n{report_text}"
-        data, usage = await self._llm.complete_json(
+        data, usage = await self._llm.complete_structured(
             model=self._config.judge_model,
             system=system,
             user_content=user_content,
-            schema=SHORT_ANSWER_SCHEMA,
+            response_model=ShortAnswer,
             max_tokens=64,
         )
         self.calls_made += 1
@@ -140,11 +129,11 @@ class Judge:
         await db.set_judge_cache(
             self._config.database_url,
             cache_key=cache_key,
-            verdict=data,
+            verdict=data.model_dump(),
             judge_model=self._config.judge_model,
             rubric_version=self._config.judge_rubric_version,
         )
-        return data["short_answer"], False
+        return data.short_answer, False
 
     async def judge_citation(self, *, claim: str, quote: str) -> tuple[bool, str, bool]:
         """Returns (supported, rationale, was_cache_hit)."""
@@ -157,11 +146,11 @@ class Judge:
 
         system = load_eval_prompt("judge_citation_v1.txt")
         user_content = f"Claim: {claim}\nQuote: {quote}"
-        data, usage = await self._llm.complete_json(
+        data, usage = await self._llm.complete_structured(
             model=self._config.judge_model,
             system=system,
             user_content=user_content,
-            schema=CITATION_SCHEMA,
+            response_model=CitationVerdict,
             max_tokens=256,
         )
         self.calls_made += 1
@@ -169,8 +158,8 @@ class Judge:
         await db.set_judge_cache(
             self._config.database_url,
             cache_key=cache_key,
-            verdict=data,
+            verdict=data.model_dump(),
             judge_model=self._config.judge_model,
             rubric_version=self._config.judge_rubric_version,
         )
-        return data["supported"], data["rationale"], False
+        return data.supported, data.rationale, False

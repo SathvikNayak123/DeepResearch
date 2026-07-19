@@ -39,8 +39,14 @@ class BudgetConfig:
 
 @dataclass
 class RunConfig:
+    # Bounded parallel wave width (docs/DESIGN.md decision row 1): the
+    # supervisor's readiness-gated Send fan-out never dispatches more than
+    # this many subagents in one wave (config.max_concurrency).
     max_workers: int = 4
-    coverage_threshold: float = 0.8
+    # Planner over-decomposition guard (docs/DESIGN.md decision row 1/2): a
+    # dependency-graph plan validated against this ceiling before dispatch —
+    # see agent/dag.py's validate_plan.
+    max_nodes: int = 6
     planner_model: str = field(default_factory=lambda: os.getenv("DEEPRESEARCH_PLANNER_MODEL", "claude-opus-4-8"))
     worker_model: str = field(default_factory=lambda: os.getenv("DEEPRESEARCH_WORKER_MODEL", "claude-opus-4-8"))
     reflection_model: str = field(
@@ -53,11 +59,27 @@ class RunConfig:
     local_corpus_dir: str | None = field(default_factory=lambda: os.getenv("DEEPRESEARCH_LOCAL_CORPUS_DIR"))
     budget: BudgetConfig = field(default_factory=BudgetConfig)
 
-    # Planning style (docs/DESIGN.md decision row 2). "plan_first" is the
-    # default per that decision; "react" is the alternative this session's
-    # ablation measures head-to-head — see docs/DESIGN.md's dated addendum.
-    planning_style: str = field(default_factory=lambda: os.getenv("DEEPRESEARCH_PLANNING_STYLE", "plan_first"))
-    max_react_steps: int = 5  # bounded step ceiling for "react" mode, same role as max_replans
+    # Per-node ReAct step ceiling (agent/subagent.py's tool-calling loop) —
+    # same explicit-gate role as max_replans/max_corrections below.
+    max_react_steps: int = 5
+    # Bounded per-hop self-correction (requeue-on-failed-verify) passes
+    # (agent/graph.py's subagent_node) — an explicit stopping gate, never
+    # "the agent decides".
+    max_corrections: int = 2
+    # Bounded post-synthesis reflection passes (agent/graph.py): the final
+    # report can trigger at most this many follow-up-node waves before the
+    # run stops regardless of remaining gaps — an explicit ceiling, same
+    # role as max_replans/max_corrections above.
+    max_reflect: int = 2
+
+    # LangGraph checkpointer (docs/DESIGN.md decision row 14): an
+    # AsyncSqliteSaver keyed by thread_id=run_id, so an interrupted run can
+    # resume from its last completed wave instead of restarting from
+    # scratch. Distinct from database_url below (the eval/run-store DB) —
+    # this is LangGraph's own state-snapshot store.
+    checkpoint_db_path: str = field(
+        default_factory=lambda: os.getenv("DEEPRESEARCH_CHECKPOINT_DB", "./checkpoints.sqlite")
+    )
 
     # Retrieval quality (docs/DESIGN.md decision row 7). Default set by the
     # rerank ablation in docs/RESULTS.md, not a guess — see that doc before
@@ -66,7 +88,20 @@ class RunConfig:
         default_factory=lambda: os.getenv("DEEPRESEARCH_RERANK_ENABLED", "true").lower() != "false"
     )
     rerank_backend: str = field(default_factory=lambda: os.getenv("DEEPRESEARCH_RERANK_BACKEND", "bge"))
-    candidate_pool_size: int = 6  # search results fetched before reranking
+    # Search results (documents) fetched before reranking. Was 6 — too narrow
+    # to even structurally cover FRAMES questions, which docs/DESIGN.md §5.1
+    # documents as needing 2-15 Wikipedia articles: at pool_size=6, a question
+    # needing 7+ relevant articles can never retrieve them all regardless of
+    # rerank quality, since candidates not fetched can't be reranked into
+    # existence. Widened to give the cross-encoder real room to correct the
+    # search backend's own (cheaper, first-stage) ranking mistakes, not just
+    # reorder an already-narrow set. Tradeoff, not free: more fetch calls
+    # (cost/latency) and more chunks entering the same self-hosted CPU
+    # reranker call that docs/DESIGN.md row 7 already flags as the dominant
+    # p95 latency contributor — re-measure rerank latency at this pool size
+    # before shipping it live (docs/RESULTS.md's CPU-oversubscription finding
+    # was hit at a smaller chunk volume than this).
+    candidate_pool_size: int = 20
     rerank_top_k: int = 6  # chunks kept for the worker's LLM context after reranking
     # Caps chunks-per-source fed into the reranker (docs/RESULTS.md: a full
     # Wikipedia article can chunk into dozens of ~800-char windows; scoring

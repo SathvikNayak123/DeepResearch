@@ -4,7 +4,11 @@ import random
 
 import pytest
 
+from deepresearch.agent.graph import GapCheck, HopVerdict
+from deepresearch.agent.subagent import FindingDraft
+from deepresearch.agent.synthesis import SynthesisDraft
 from deepresearch.llm.client import LLMUsage
+from deepresearch.schemas import Claim, Plan, SubQuestion
 
 
 class StubLLM:
@@ -14,7 +18,11 @@ class StubLLM:
     require a real LLMClient and a real provider key (no fake fallback).
     This stub exists purely so orchestrator control-flow tests (budget
     enforcement, persistence, event ordering) run fast, free, and offline,
-    without exercising anything about model quality.
+    without exercising anything about model quality. Dispatches on
+    `response_model` identity (matching agent/graph.py's/subagent.py's/
+    synthesis.py's actual Pydantic response models), not a schema dict —
+    this stub's job is to construct a valid instance of whatever model was
+    requested, mirroring what Instructor's real validation would accept.
     """
 
     def __init__(self, seed: int = 0) -> None:
@@ -28,55 +36,43 @@ class StubLLM:
         start = self._rng.randint(0, len(window) - length)
         return window[start : start + length].strip() or "(no content available)"
 
-    async def complete_json(
+    async def complete_structured(
         self,
         *,
         model: str,
         system: str,
         user_content: str,
-        schema: dict,
+        response_model: type,
         max_tokens: int = 4096,
-        effort: str = "medium",
-    ) -> tuple[dict, LLMUsage]:
-        props = schema.get("properties", {})
+    ):
         usage = LLMUsage(input_tokens=max(len(user_content) // 4, 1), output_tokens=60, cost_usd=0.0)
 
-        if "sub_questions" in props:
-            data = {"sub_questions": [f"Background relevant to: {user_content[:120]}"]}
-        elif "next_query" in props:
-            n_done_notes = user_content.count("Query:")
-            data = {
-                "done": n_done_notes >= 2,
-                "next_query": f"Follow-up relevant to: {user_content[:120]}",
-                "rationale": "stub react step: bounded to 2 queries for comparability",
-            }
-        elif "claims" in props:
-            snippet = self._snippet_after(user_content, "Sources:", length=150)
-            data = {
-                "claims": [{"text": snippet, "source_id": "src_1", "quote": snippet, "confidence": 0.5}],
-                "open_gaps": [],
-            }
-        elif "coverage_score" in props:
-            data = {
-                "coverage_score": 0.9,
-                "rationale": "stub judge: treating coverage as sufficient to keep the test run short",
-                "should_replan": False,
-                "new_sub_questions": [],
-            }
-        elif "cited_source_ids" in props:
+        if response_model is Plan:
+            result = Plan(
+                sub_questions=[
+                    SubQuestion(id="n1", question=f"Background relevant to: {user_content[:120]}", depends_on=[])
+                ]
+            )
+        elif response_model is FindingDraft:
+            snippet = self._snippet_after(user_content, "Retrieved passages:", length=150)
+            result = FindingDraft(
+                answer=snippet,
+                claims=[Claim(text=snippet, source_id="src_1", quote=snippet, confidence=0.5)],
+                entities_extracted={},
+                confidence=0.7,
+                open_gaps=[],
+            )
+        elif response_model is HopVerdict:
+            result = HopVerdict(grounded=True, reason="stub: always grounded")
+        elif response_model is GapCheck:
+            result = GapCheck(has_gaps=False, followup_questions=[], rationale="stub: no gaps")
+        elif response_model is SynthesisDraft:
             snippet = self._snippet_after(user_content, "Notes:", length=200)
-            data = {"text": f"{snippet} [src_1]", "cited_source_ids": ["src_1"]}
-        elif "correct" in props:
-            data = {"correct": self._rng.random() < 0.7, "rationale": "stub judge — random verdict, not grounded"}
-        elif "supported" in props:
-            data = {"supported": self._rng.random() < 0.8, "rationale": "stub judge — random verdict, not grounded"}
-        elif "short_answer" in props:
-            snippet = self._snippet_after(user_content, "Report:", length=40)
-            data = {"short_answer": snippet}
+            result = SynthesisDraft(text=f"{snippet} [src_1]", cited_source_ids=["src_1"])
         else:
-            raise ValueError(f"StubLLM doesn't recognize this schema shape: {schema}")
+            raise ValueError(f"StubLLM doesn't recognize this response_model: {response_model}")
 
-        return data, usage
+        return result, usage
 
 
 @pytest.fixture

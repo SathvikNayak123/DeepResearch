@@ -22,29 +22,26 @@ from __future__ import annotations
 
 import json
 
+from pydantic import BaseModel
+
 from deepresearch.llm.client import LLMClient, LLMUsage
 
 from eval.prompts.loader import load_eval_prompt
 
 DIMENSIONS = ["comprehensiveness", "insight", "instruction_following", "readability"]
 
-_CRITERION_SCORE_ITEM = {
-    "type": "object",
-    "properties": {
-        "criterion": {"type": "string"},
-        "analysis": {"type": "string"},
-        "target_score": {"type": "number"},
-    },
-    "required": ["criterion", "analysis", "target_score"],
-    "additionalProperties": False,
-}
 
-RACE_SCHEMA = {
-    "type": "object",
-    "properties": {dim: {"type": "array", "items": _CRITERION_SCORE_ITEM} for dim in DIMENSIONS},
-    "required": DIMENSIONS,
-    "additionalProperties": False,
-}
+class CriterionScore(BaseModel):
+    criterion: str
+    analysis: str
+    target_score: float
+
+
+class RaceScores(BaseModel):
+    comprehensiveness: list[CriterionScore]
+    insight: list[CriterionScore]
+    instruction_following: list[CriterionScore]
+    readability: list[CriterionScore]
 
 
 async def score_report(
@@ -61,14 +58,14 @@ async def score_report(
         f"Article to evaluate:\n{article}\n\n"
         f"Evaluation criteria (JSON, grouped by dimension):\n{criteria_json}"
     )
-    data, usage = await llm.complete_json(
+    result, usage = await llm.complete_structured(
         model=model,
         system=system,
         user_content=user_content,
-        schema=RACE_SCHEMA,
+        response_model=RaceScores,
         max_tokens=8192,
     )
-    return data, usage
+    return result.model_dump(), usage
 
 
 def aggregate_race_score(llm_output: dict, criteria_data: dict) -> dict:

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import asyncio
-import json
 import os
 from dataclasses import dataclass
+from typing import TypeVar
 
 import anthropic
-import httpx
+import instructor
+import openai
+from pydantic import BaseModel
 
 # $ per million tokens (input, output). Verified current pricing —
 # keep in sync with shared/models.md if these change.
@@ -21,10 +22,7 @@ COST_PER_MTOK_USD: dict[str, tuple[float, float]] = {
     "google/gemini-2.5-flash-lite": (0.10, 0.40),
 }
 
-# claude-haiku-4-5 rejects output_config.effort outright ("This model does
-# not support the effort parameter") - confirmed live on the deployed stack,
-# 2026-07-04. Everything else in COST_PER_MTOK_USD supports it.
-MODELS_WITHOUT_EFFORT_SUPPORT = {"claude-haiku-4-5"}
+T = TypeVar("T", bound=BaseModel)
 
 
 @dataclass
@@ -40,11 +38,15 @@ def _cost(model: str, input_tokens: int, output_tokens: int) -> float:
 
 
 class LLMClient:
-    """Thin wrapper around the Anthropic SDK with token/cost accounting.
+    """Thin wrapper around Instructor for structured-output completions with
+    token/cost accounting.
 
-    Every call returns structured JSON via output_config.format, since the
-    agent's claim->source citation mapping needs to be machine-checkable,
-    not parsed out of free-form prose.
+    Every call validates its response directly against a Pydantic model
+    (`response_model=...`), not a hand-maintained JSON-schema dict parsed
+    into a raw dict afterward — the Pydantic model is the single source of
+    truth for both what's requested and what's returned, and Instructor
+    retries automatically (re-prompting the model with the validation error)
+    if the response doesn't validate on the first attempt.
     """
 
     def __init__(self) -> None:
@@ -56,114 +58,71 @@ class LLMClient:
         #     Requires `pip install "anthropic[bedrock]"` and DEEPRESEARCH_*_MODEL
         #     set to the Bedrock model ID from the Bedrock model catalog (not the
         #     direct-API name), once that model is invokable in that account/region.
-        #   - "openrouter": OpenAI-compatible chat-completions API (not Anthropic's
-        #     Messages API - genuinely different request/response shape, handled
-        #     separately in complete_json), OPENROUTER_API_KEY. Lets DEEPRESEARCH_*_MODEL
-        #     point at any OpenRouter-hosted model (e.g. "google/gemini-2.5-flash"),
-        #     not just Claude - a real provider swap, not just a billing-route swap.
+        #   - "openrouter": OpenAI-compatible chat-completions API (genuinely
+        #     different request/response shape from Anthropic's Messages API,
+        #     handled via a separate Instructor client below), OPENROUTER_API_KEY.
+        #     Lets DEEPRESEARCH_*_MODEL point at any OpenRouter-hosted model
+        #     (e.g. "google/gemini-2.5-flash"), not just Claude.
+        # Mode is pinned explicitly, not left at Instructor's default
+        # (Mode.TOOLS): live-tested against google/gemini-2.5-flash via
+        # OpenRouter on this project's actual nested Plan{sub_questions:
+        # list[SubQuestion]} schema, Mode.TOOLS (and TOOLS_STRICT)
+        # consistently flattened each SubQuestion into a plain string
+        # instead of a nested object, failing validation across all retries
+        # -- Mode.JSON_SCHEMA (the API's native structured-output/constrained
+        # decoding, matching what this client used natively before Instructor)
+        # produced correct nested objects every time. ANTHROPIC_JSON is the
+        # equivalent choice for the Anthropic path, for the same reason, but
+        # is not live-verified this session (Anthropic credit exhausted --
+        # docs/RESULTS.md).
         self._provider = os.getenv("DEEPRESEARCH_LLM_PROVIDER", "anthropic")
         if self._provider == "bedrock":
-            self._client = anthropic.AsyncAnthropicBedrock(aws_region=os.getenv("AWS_REGION", "us-east-1"))
+            raw = anthropic.AsyncAnthropicBedrock(aws_region=os.getenv("AWS_REGION", "us-east-1"))
+            self._client = instructor.from_anthropic(raw, mode=instructor.Mode.ANTHROPIC_JSON)
+            self._openai_style = False
         elif self._provider == "openrouter":
-            self._client = httpx.AsyncClient(
-                base_url="https://openrouter.ai/api/v1",
-                headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
-                timeout=120.0,
+            raw = openai.AsyncOpenAI(
+                base_url="https://openrouter.ai/api/v1", api_key=os.environ["OPENROUTER_API_KEY"]
             )
+            self._client = instructor.from_openai(raw, mode=instructor.Mode.JSON_SCHEMA)
+            self._openai_style = True
         else:
-            self._client = anthropic.AsyncAnthropic()
+            self._client = instructor.from_anthropic(anthropic.AsyncAnthropic(), mode=instructor.Mode.ANTHROPIC_JSON)
+            self._openai_style = False
 
-    async def complete_json(
+    async def complete_structured(
         self,
         *,
         model: str,
         system: str,
         user_content: str,
-        schema: dict,
+        response_model: type[T],
         max_tokens: int = 4096,
-        effort: str = "medium",
-    ) -> tuple[dict, LLMUsage]:
-        if self._provider == "openrouter":
-            return await self._complete_json_openrouter(
-                model=model, system=system, user_content=user_content, schema=schema, max_tokens=max_tokens
+    ) -> tuple[T, LLMUsage]:
+        if self._openai_style:
+            result, completion = await self._client.chat.completions.create_with_completion(
+                model=model,
+                max_tokens=max_tokens,
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": user_content}],
+                response_model=response_model,
             )
+            usage = LLMUsage(
+                input_tokens=completion.usage.prompt_tokens,
+                output_tokens=completion.usage.completion_tokens,
+                cost_usd=_cost(model, completion.usage.prompt_tokens, completion.usage.completion_tokens),
+            )
+            return result, usage
 
-        output_config: dict = {"format": {"type": "json_schema", "schema": schema}}
-        if model not in MODELS_WITHOUT_EFFORT_SUPPORT:
-            output_config["effort"] = effort
-
-        response = await self._client.messages.create(
+        result, completion = await self._client.chat.completions.create_with_completion(
             model=model,
             max_tokens=max_tokens,
             system=system,
-            output_config=output_config,
             messages=[{"role": "user", "content": user_content}],
+            response_model=response_model,
         )
-        text = next(block.text for block in response.content if block.type == "text")
-        data = json.loads(text)
         usage = LLMUsage(
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
-            cost_usd=_cost(model, response.usage.input_tokens, response.usage.output_tokens),
+            input_tokens=completion.usage.input_tokens,
+            output_tokens=completion.usage.output_tokens,
+            cost_usd=_cost(model, completion.usage.input_tokens, completion.usage.output_tokens),
         )
-        return data, usage
-
-    async def _complete_json_openrouter(
-        self, *, model: str, system: str, user_content: str, schema: dict, max_tokens: int
-    ) -> tuple[dict, LLMUsage]:
-        """OpenAI-compatible chat-completions shape - no "effort" knob (that's
-        an Anthropic-specific parameter with no OpenRouter/OpenAI equivalent).
-
-        Retries on OpenRouter's observed transient failure mode: a 200 OK
-        response whose body embeds `choices[0].error` (e.g. an upstream
-        rate-limit "JSON error injected into SSE stream") with truncated
-        `content` that fails json.loads - confirmed live during this
-        project's first real-key OpenRouter smoke run (transient: 3/3
-        immediate retries succeeded there). A second real occurrence (the
-        architecture ablation, same day, heavier same-day call volume)
-        outlasted the original 3-attempt/~4.5s-total backoff, so this is
-        sustained-enough under load to need more patience, not just a
-        one-off blip: 5 attempts, 2/4/8/16s backoff (~30s total) before
-        giving up. A crash here mid-benchmark would otherwise discard the
-        whole run's in-memory trajectory (RunRecorder only flushes at the
-        end - see docs/RESULTS.md's trace-replay section), so waiting up to
-        30s here is much cheaper than re-running the benchmark.
-        """
-        last_exc: Exception | None = None
-        max_attempts = 5
-        for attempt in range(max_attempts):
-            response = await self._client.post(
-                "/chat/completions",
-                json={
-                    "model": model,
-                    "max_tokens": max_tokens,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user_content},
-                    ],
-                    "response_format": {
-                        "type": "json_schema",
-                        "json_schema": {"name": "response", "strict": True, "schema": schema},
-                    },
-                },
-            )
-            response.raise_for_status()
-            body = response.json()
-            choice = body["choices"][0]
-            try:
-                if choice.get("error"):
-                    raise ValueError(f"OpenRouter choice error: {choice['error']}")
-                data = json.loads(choice["message"]["content"])
-            except (ValueError, json.JSONDecodeError) as exc:
-                last_exc = exc
-                if attempt < max_attempts - 1:
-                    await asyncio.sleep(2.0 * (2**attempt))  # 2s, 4s, 8s, 16s
-                    continue
-                raise
-            usage_in = body["usage"]["prompt_tokens"]
-            usage_out = body["usage"]["completion_tokens"]
-            usage = LLMUsage(
-                input_tokens=usage_in, output_tokens=usage_out, cost_usd=_cost(model, usage_in, usage_out)
-            )
-            return data, usage
-        raise last_exc  # unreachable, satisfies type checkers
+        return result, usage

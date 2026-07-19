@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from deepresearch.agent.orchestrator import run_research
 from deepresearch.backends.local_corpus import LocalCorpusBackend
@@ -15,6 +16,30 @@ DOCS = [
 ]
 
 
+class StubChatModel:
+    """First turn requests one `search` call (so the real search/fetch tools
+    actually run and get recorded -- what this file's persistence tests
+    check for); second turn answers. The per-hop finalize output itself is
+    fully controlled by make_stub_llm."""
+
+    def __init__(self) -> None:
+        self._turn = 0
+
+    def bind_tools(self, tools):
+        return self
+
+    async def ainvoke(self, messages):
+        self._turn += 1
+        if self._turn == 1:
+            msg = AIMessage(
+                content="", tool_calls=[{"name": "search", "args": {"query": "capital"}, "id": "call_1", "type": "tool_call"}]
+            )
+        else:
+            msg = AIMessage(content="done", tool_calls=[])
+        msg.usage_metadata = {"input_tokens": 5, "output_tokens": 5}
+        return msg
+
+
 @pytest.mark.asyncio
 async def test_run_research_persists_runs_trajectories_and_tool_calls(tmp_path, make_stub_llm):
     init_telemetry()
@@ -22,13 +47,17 @@ async def test_run_research_persists_runs_trajectories_and_tool_calls(tmp_path, 
 
     config = RunConfig(
         database_url=db_url,
+        checkpoint_db_path=str(tmp_path / "checkpoints.sqlite"),
         cache_enabled=False,
         rerank_enabled=False,  # keep it fast — reranker model isn't the point of this test
     )
     backend = LocalCorpusBackend.from_dicts(DOCS)
     llm = make_stub_llm(seed=1)
 
-    result = await run_research("What is the capital of France?", config=config, search_backend=backend, llm=llm, benchmark_name="test")
+    result = await run_research(
+        "What is the capital of France?", config=config, search_backend=backend, llm=llm,
+        chat_model=StubChatModel(), benchmark_name="test",
+    )
 
     assert result.status == RunStatus.COMPLETED
 
@@ -46,7 +75,12 @@ async def test_run_research_persists_runs_trajectories_and_tool_calls(tmp_path, 
     assert run_rows[0]._mapping["benchmark_name"] == "test"
 
     stages = {row._mapping["stage"] for row in traj_rows}
-    assert stages == {"plan", "worker", "reflection", "synthesis"}
+    # A single independent (leaf) node: plan -> subagent(agent_step + final-
+    # ize_finding, recorded by the subagent's own inner ReAct subgraph) ->
+    # synthesis -> reflection. No "verify" stage — nothing depends on the
+    # lone node, so its finding is marked verified for free (no paid
+    # grounding call).
+    assert stages == {"plan", "subagent", "agent_step", "finalize_finding", "synthesis", "reflection"}
 
     tool_names = {row._mapping["tool_name"] for row in tool_rows}
     assert "search" in tool_names
@@ -57,52 +91,16 @@ async def test_run_research_persists_runs_trajectories_and_tool_calls(tmp_path, 
 
 
 @pytest.mark.asyncio
-async def test_run_research_react_mode_persists_react_steps(tmp_path, make_stub_llm):
-    """docs/DESIGN.md decision row 2 alternative: no upfront "plan" stage,
-    "react_step" stages instead, bounded by max_react_steps."""
-    init_telemetry()
-    db_url = f"sqlite+aiosqlite:///{tmp_path / 'orch_react_test.db'}"
-
-    config = RunConfig(
-        database_url=db_url,
-        cache_enabled=False,
-        rerank_enabled=False,
-        planning_style="react",
-        max_react_steps=3,
-    )
-    backend = LocalCorpusBackend.from_dicts(DOCS)
-    llm = make_stub_llm(seed=1)
-
-    result = await run_research(
-        "What is the capital of France?", config=config, search_backend=backend, llm=llm, benchmark_name="test"
-    )
-
-    assert result.status == RunStatus.COMPLETED
-    assert result.iterations <= config.max_react_steps
-
-    from sqlalchemy import select
-    from deepresearch.store.models import trajectories
-
-    engine = db.get_engine(db_url)
-    async with engine.begin() as conn:
-        traj_rows = (await conn.execute(select(trajectories).where(trajectories.c.run_id == result.run_id))).fetchall()
-
-    stages = {row._mapping["stage"] for row in traj_rows}
-    assert "plan" not in stages
-    assert "reflection" not in stages
-    assert "react_step" in stages
-    assert "worker" in stages
-    assert "synthesis" in stages
-
-
-@pytest.mark.asyncio
 async def test_run_research_on_event_fires_for_every_stage(tmp_path, make_stub_llm):
     """The SSE streaming endpoint (api/streaming.py) has no other hook into
-    run_research()'s progress — on_event must fire once per _call_stage,
-    in order, with the stages a plan-first run actually produces."""
+    run_research()'s progress — on_event must fire once per stage, in order,
+    with the stages this graph actually produces."""
     init_telemetry()
     db_url = f"sqlite+aiosqlite:///{tmp_path / 'orch_events_test.db'}"
-    config = RunConfig(database_url=db_url, cache_enabled=False, rerank_enabled=False)
+    config = RunConfig(
+        database_url=db_url, checkpoint_db_path=str(tmp_path / "checkpoints.sqlite"),
+        cache_enabled=False, rerank_enabled=False,
+    )
     backend = LocalCorpusBackend.from_dicts(DOCS)
     llm = make_stub_llm(seed=1)
 
@@ -112,18 +110,19 @@ async def test_run_research_on_event_fires_for_every_stage(tmp_path, make_stub_l
         events.append(event)
 
     result = await run_research(
-        "What is the capital of France?", config=config, search_backend=backend, llm=llm, on_event=on_event
+        "What is the capital of France?", config=config, search_backend=backend, llm=llm,
+        chat_model=StubChatModel(), on_event=on_event,
     )
 
     assert result.status == RunStatus.COMPLETED
     assert events[0] == {"type": "run_started", "run_id": result.run_id, "question": "What is the capital of France?"}
 
     stage_events = [e for e in events[1:] if e["type"] == "stage_complete"]
-    assert len(stage_events) >= 3  # plan, >=1 worker, reflection, synthesis
+    assert len(stage_events) >= 3  # plan, subagent, synthesis (+ reflection)
     stages_in_order = [e["stage"] for e in stage_events]
     assert stages_in_order[0] == "plan"
-    assert stages_in_order[-1] == "synthesis"
-    assert "worker" in stages_in_order
+    assert stages_in_order[-1] == "reflection"
+    assert "subagent" in stages_in_order
     assert all(isinstance(e["latency_ms"], (int, float)) for e in stage_events)
 
 
@@ -131,11 +130,16 @@ async def test_run_research_on_event_fires_for_every_stage(tmp_path, make_stub_l
 async def test_run_research_bypass_cache_flag_means_no_stats(tmp_path, make_stub_llm):
     init_telemetry()
     db_url = f"sqlite+aiosqlite:///{tmp_path / 'orch_test2.db'}"
-    config = RunConfig(database_url=db_url, cache_enabled=False, rerank_enabled=False)
+    config = RunConfig(
+        database_url=db_url, checkpoint_db_path=str(tmp_path / "checkpoints.sqlite"),
+        cache_enabled=False, rerank_enabled=False,
+    )
     backend = LocalCorpusBackend.from_dicts(DOCS)
     llm = make_stub_llm(seed=2)
 
-    result = await run_research("Capital of Germany?", config=config, search_backend=backend, llm=llm)
+    result = await run_research(
+        "Capital of Germany?", config=config, search_backend=backend, llm=llm, chat_model=StubChatModel(),
+    )
 
     assert result.cache_stats.hit_rate == 0.0
     assert result.cache_stats.estimated_dollars_saved == 0.0

@@ -1,3 +1,13 @@
+"""Shared retrieval half of the agent: search -> fetch -> chunk -> rerank.
+
+Extracted from worker.run_worker so the plan-first worker and the react_agent's
+`search` tool (agent/react_agent.py) share ONE retrieval definition — same
+backend/rerank/chunk-cap/tool-call-recording behavior, so an ablation between
+the two agent topologies isn't confounded by two subtly different retrieval
+paths. worker.run_worker calls this and only adds the claim-extraction LLM step
+on top; behavior for its existing tests is unchanged (same code, just moved).
+"""
+
 from __future__ import annotations
 
 import time
@@ -5,35 +15,10 @@ import time
 from deepresearch.backends.base import SearchBackend
 from deepresearch.chunking import cap_chunks, chunk_text
 from deepresearch.config import RunConfig
-from deepresearch.llm.client import LLMClient, LLMUsage
-from deepresearch.prompts.loader import load_prompt
 from deepresearch.rerank.base import RerankBackend
-from deepresearch.schemas import SourceRegistryEntry, SubQuestion, WorkerNotes
+from deepresearch.schemas import SourceRegistryEntry
 from deepresearch.store.recorder import RunRecorder
-from deepresearch.telemetry.otel_setup import current_span_id_hex, stage_span
-
-WORKER_NOTES_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "claims": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "text": {"type": "string"},
-                    "source_id": {"type": "string"},
-                    "quote": {"type": "string"},
-                    "confidence": {"type": "number"},
-                },
-                "required": ["text", "source_id", "quote", "confidence"],
-                "additionalProperties": False,
-            },
-        },
-        "open_gaps": {"type": "array", "items": {"type": "string"}},
-    },
-    "required": ["claims", "open_gaps"],
-    "additionalProperties": False,
-}
+from deepresearch.telemetry.otel_setup import stage_span
 
 
 def _cache_hit(backend, misses_before: int | None) -> bool:
@@ -46,26 +31,26 @@ def _cache_hit(backend, misses_before: int | None) -> bool:
     return stats.search_misses + stats.fetch_misses == misses_before
 
 
-async def run_worker(
-    sub_question: SubQuestion,
+async def retrieve_chunks(
+    query: str,
     *,
     search_backend: SearchBackend,
     config: RunConfig,
-    llm: LLMClient,
     source_registry: dict[str, SourceRegistryEntry],
     rerank_backend: RerankBackend | None = None,
     recorder: RunRecorder | None = None,
-) -> tuple[WorkerNotes, LLMUsage]:
-    # This worker runs inside a "worker:<id>" OTel span opened by the caller
-    # (agent/orchestrator.py's _call_stage) — tool_calls attach to that span.
-    parent_span_id = current_span_id_hex()
-
+    parent_span_id: str = "",
+    source_id_prefix: str = "",
+) -> list[tuple[str, str, str]]:
+    """Returns the post-rerank selected chunks as (source_id, title, chunk),
+    registering each surfaced source in `source_registry` and recording
+    search/fetch/rerank tool_calls against `parent_span_id`. No LLM."""
     stats = getattr(search_backend, "stats", None)
     misses_before = (stats.search_misses + stats.fetch_misses) if stats else None
 
     search_start = time.perf_counter()
     try:
-        results = await search_backend.search(sub_question.question, max_results=config.candidate_pool_size)
+        results = await search_backend.search(query, max_results=config.candidate_pool_size)
         search_success = True
     except Exception:
         results = []
@@ -75,7 +60,7 @@ async def run_worker(
         recorder.record_tool_call(
             span_id=parent_span_id,
             tool_name="search",
-            args={"query": sub_question.question, "max_results": config.candidate_pool_size},
+            args={"query": query, "max_results": config.candidate_pool_size},
             result_summary={"n_results": len(results)},
             success=search_success,
             cache_hit=_cache_hit(search_backend, misses_before),
@@ -85,7 +70,16 @@ async def run_worker(
     # (source_id, title, chunk_text) — one entry per chunk, several chunks per source
     candidates: list[tuple[str, str, str]] = []
     for result in results:
-        source_id = f"src_{len(source_registry) + 1}"
+        # source_id_prefix (defaults to "", legacy global numbering) namespaces
+        # ids per-worker when source_registry is a fresh per-worker dict merged
+        # back into a shared registry afterward (agent/graph.py's parallel
+        # worker map) — without it, every worker's registry restarts at
+        # src_1 and a dict-union merge would silently collide/overwrite
+        # entries across workers. Sequential callers (native worker, the
+        # react_agent's single shared registry) pass no prefix.
+        source_id = (
+            f"src_{source_id_prefix}_{len(source_registry) + 1}" if source_id_prefix else f"src_{len(source_registry) + 1}"
+        )
         source_registry[source_id] = SourceRegistryEntry(source_id=source_id, url=result.url, title=result.title)
 
         fetch_misses_before = (stats.search_misses + stats.fetch_misses) if stats else None
@@ -121,7 +115,7 @@ async def run_worker(
     ) as rerank_span:
         rerank_start = time.perf_counter()
         if config.rerank_enabled and rerank_backend is not None and candidates:
-            ranked = await rerank_backend.rerank(sub_question.question, [c[2] for c in candidates])
+            ranked = await rerank_backend.rerank(query, [c[2] for c in candidates])
             selected = [candidates[rc.index] for rc in ranked[: config.rerank_top_k]]
         else:
             selected = candidates[: config.rerank_top_k]
@@ -139,21 +133,4 @@ async def run_worker(
             latency_ms=rerank_latency_ms,
         )
 
-    sources_block = "\n\n".join(f"[{sid}] {title}\n{chunk[:2000]}" for sid, title, chunk in selected)
-    system = load_prompt("worker_v1.txt")
-    user_content = f"Sub-question: {sub_question.question}\n\nSources:\n{sources_block}"
-
-    data, usage = await llm.complete_json(
-        model=config.worker_model,
-        system=system,
-        user_content=user_content,
-        schema=WORKER_NOTES_SCHEMA,
-        max_tokens=2048,
-    )
-    notes = WorkerNotes(
-        sub_question_id=sub_question.id,
-        sub_question=sub_question.question,
-        claims=data["claims"],
-        open_gaps=data["open_gaps"],
-    )
-    return notes, usage
+    return selected

@@ -1,19 +1,16 @@
 from __future__ import annotations
 
+from pydantic import BaseModel, Field
+
 from deepresearch.config import RunConfig
 from deepresearch.llm.client import LLMClient, LLMUsage
 from deepresearch.prompts.loader import load_prompt
 from deepresearch.schemas import Report, SourceRegistryEntry, WorkerNotes
 
-SYNTHESIS_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "text": {"type": "string"},
-        "cited_source_ids": {"type": "array", "items": {"type": "string"}},
-    },
-    "required": ["text", "cited_source_ids"],
-    "additionalProperties": False,
-}
+
+class SynthesisDraft(BaseModel):
+    text: str
+    cited_source_ids: list[str] = Field(default_factory=list)
 
 
 async def synthesize(
@@ -33,13 +30,13 @@ async def synthesize(
         f"Research question: {question}\n\nNotes:\n{notes_block}\n\n"
         "Cite claims inline using [source_id]."
     )
-    data, usage = await llm.complete_json(
+    data, usage = await llm.complete_structured(
         model=config.synthesis_model,
         system=system,
         user_content=user_content,
-        schema=SYNTHESIS_SCHEMA,
+        response_model=SynthesisDraft,
         max_tokens=4096,
     )
-    citations = [source_registry[sid] for sid in data["cited_source_ids"] if sid in source_registry]
-    report = Report(text=data["text"], citations=citations)
+    citations = [source_registry[sid] for sid in data.cited_source_ids if sid in source_registry]
+    report = Report(text=data.text, citations=citations)
     return report, usage

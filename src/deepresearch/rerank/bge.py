@@ -20,8 +20,14 @@ class CrossEncoderRerankBackend(RerankBackend):
     def __init__(self, model_name: str | None = None) -> None:
         self._model_name = model_name or os.getenv("DEEPRESEARCH_RERANK_MODEL", DEFAULT_MODEL)
         self._model = None  # lazy-loaded on first use, not at construction
-        # One backend instance is shared across a run's whole bounded worker
-        # pool (orchestrator.py builds it once, passes it to every worker).
+        # One backend instance is shared process-wide -- across every run's
+        # own bounded worker pool AND across concurrent runs themselves
+        # (rerank/__init__.py's build_rerank_backend caches by (kind, model)
+        # instead of constructing fresh per call). Both locks below need that
+        # same process-wide scope: a second concurrent run building its own
+        # fresh instance would get its own locks, silently defeating the
+        # protection they exist for.
+        #
         # Concurrent first-use calls used to race into CrossEncoder(...)
         # construction simultaneously, corrupting transformers' meta-device
         # init state (NotImplementedError: "Cannot copy out of meta tensor")

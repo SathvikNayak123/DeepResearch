@@ -171,3 +171,36 @@ async def get_tool_calls_for_run(database_url: str, run_id: str) -> list[dict]:
     async with engine.begin() as conn:
         result = await conn.execute(select(tool_calls).where(tool_calls.c.run_id == run_id))
         return [dict(row._mapping) for row in result.fetchall()]
+
+
+async def get_total_cost_usd(database_url: str) -> float:
+    """Sum of total_cost_usd across every run row in this database — the
+    real, measured cumulative spend, not an upfront per-question estimate.
+    Used to enforce a hard total-cost cap across a multi-invocation eval
+    session (see eval/run_eval.py's --max-total-cost-usd): estimates based
+    on a small sample have twice underrun real cost this session, so a
+    hard budget needs to check actual spend, not trust a projection."""
+    from sqlalchemy import func
+
+    engine = get_engine(database_url)
+    async with engine.begin() as conn:
+        result = await conn.execute(select(func.sum(runs.c.total_cost_usd)))
+        total = result.scalar()
+        return float(total) if total is not None else 0.0
+
+
+async def get_scored_question_ids(database_url: str, benchmark_name: str) -> set[str]:
+    """Question ids that already have at least one eval_scores row for this
+    benchmark in this database — lets eval.run_eval resume a batch (same
+    database_url) without re-running, and re-paying real LLM cost for,
+    questions a prior invocation already completed. A question that crashed
+    before any score was written (e.g. a PlanValidationError inside
+    run_research()) has no rows here and is correctly retried, not skipped."""
+    engine = get_engine(database_url)
+    async with engine.begin() as conn:
+        result = await conn.execute(
+            select(eval_scores.c.question_id)
+            .where(eval_scores.c.benchmark_name == benchmark_name)
+            .distinct()
+        )
+        return {row[0] for row in result.fetchall() if row[0] is not None}
