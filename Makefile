@@ -1,4 +1,4 @@
-.PHONY: up down test eval-smoke eval-full eval-reliability eval-drb ci-gate dump-baseline logs
+.PHONY: up down test demo migrate eval-smoke eval-full eval-reliability eval-drb ci-gate dump-baseline logs
 
 up:
 	docker compose up --build -d
@@ -8,6 +8,14 @@ down:
 
 test:
 	pytest -q
+
+# 3 hand-picked live questions through the real Tavily backend — a sanity
+# check of the live agent path, distinct from the benchmark harness below.
+demo:
+	python scripts/eval_smoke.py
+
+migrate:
+	python scripts/migrate.py
 
 # ~20 questions per benchmark (FRAMES + MuSiQue), local corpus, writes
 # scored eval_scores rows to the run store (Postgres/SQLite per DATABASE_URL).
