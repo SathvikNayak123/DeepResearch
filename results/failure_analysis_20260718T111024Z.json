@@ -1,0 +1,453 @@
+{
+  "frames": {
+    "benchmark": "frames",
+    "database_url": "sqlite+aiosqlite:///./phase2_failure.db",
+    "n_analyzed": 20,
+    "n_correct": 9,
+    "n_missed": 11,
+    "distribution": {
+      "retrieval_or_composition": 9,
+      "extraction": 1,
+      "correct": 9,
+      "synthesis": 1
+    },
+    "per_question": [
+      {
+        "run_id": "cd4fb4e03c2d4d11b771fedb5c45b48e",
+        "question": "What military awards were received by the General originally scheduled to lead Operation Torch before Lieutenant General Dwight D. Eisenhower was given command of the operation?",
+        "tag": "Multiple constraints",
+        "gold": "Joseph Stilwell was originally scheduled to lead Operation Torch before Lieutenant General Dwight D. Eisenhower was given command of the operation. Stillwell received a Distinguished Service Cross, two Army Distinguished Service Medals, a Legion of Merit award, and a Bronze Star during his military career.",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": false,
+        "failure_class": "retrieval_or_composition"
+      },
+      {
+        "run_id": "5caf0cbdbbc84bf591731f03d05aa225",
+        "question": "What are the first three letters of the capital city of the country where Shakespeare's longest play is set?",
+        "tag": "Multiple constraints | Post processing",
+        "gold": "Cop",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": true,
+        "failure_class": "extraction"
+      },
+      {
+        "run_id": "fb17aec5cd6d40b28a6361af7c07fb1b",
+        "question": "In the first movie that Emma Stone won an Academy Award for Best Actress in, did her costar win an Academy Award for Best Actor?",
+        "tag": "Multiple constraints | Post processing | Temporal reasoning",
+        "gold": "Ryan Gosling was nominated for an Academy Award for Best Actor in La La Land, but didn't win.",
+        "correct": true,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "42fac98c3e8043c996b6c74c23d8f0a2",
+        "question": "In the season before Jamal Murray won the NBA Championship, who was the fourth overall draft pick?",
+        "tag": "Multiple constraints | Temporal reasoning",
+        "gold": "Scottie Barnes",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": false,
+        "failure_class": "retrieval_or_composition"
+      },
+      {
+        "run_id": "6dc99e01a0d74734b0f4251295944760",
+        "question": "How many years separate the birth of Alexander Graham Bell and the birth of Charles Dickens?",
+        "tag": "Numerical reasoning",
+        "gold": "35",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": false,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "12f0b28dd9f04ea19f41f1675db3983c",
+        "question": "In feet, subtract the diameter of the pitching plate (\"rubber\") in softball, from the distance between the \"points\" of the bases in baseball, and multiply that figure by the year that Joe DiMaggio married Marilyn Monroe. ",
+        "tag": "Numerical reasoning | Multiple constraints",
+        "gold": "144,596. The distance between the points of bases in baseball is 90 feet, subtract the diameter of the pitching plate in softball (16 feet), to get 74, and multiply that by 1954.",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": false,
+        "failure_class": "retrieval_or_composition"
+      },
+      {
+        "run_id": "763c9f69941b4b218095437235cb4776",
+        "question": "Using data from the year 2020, if you were to combine the permanent human populations of Aukland Island, Rose Island, and Budelli Island, how many total people would you have?",
+        "tag": "Numerical reasoning | Multiple constraints | Post processing",
+        "gold": "1",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": true,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "378634d5c7e14bdfae41e86d3f3a1e4a",
+        "question": "How much taller (in centimetres) is Mark O'Halloran (ex West Tigers rugby league player) than the London Broncos' player with the heritage number 341?",
+        "tag": "Numerical reasoning | Multiple constraints | Post processing | Temporal reasoning",
+        "gold": "11cm",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": false,
+        "failure_class": "retrieval_or_composition"
+      },
+      {
+        "run_id": "98c3e15a45ea41fbba02036bb23d401c",
+        "question": "who won the formula one season in the year nine people were killed on the track at the argentine grand prix, and how old were they two years before sliced bread was first sold? ",
+        "tag": "Numerical reasoning | Multiple constraints | Temporal reasoning",
+        "gold": "Alberto Ascari, 8 years old",
+        "correct": true,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "1ef6c22410fb4963b6333320b14a4f0a",
+        "question": "What was the age difference between Mike Tyson and Tyson Fury on the respective days on which they lost their first ever fights? Represent the figure in years only.",
+        "tag": "Numerical reasoning | Post processing",
+        "gold": "12 years.",
+        "correct": false,
+        "gold_in_report": true,
+        "gold_in_claims": false,
+        "gold_in_chunks": false,
+        "failure_class": "retrieval_or_composition"
+      },
+      {
+        "run_id": "1b077e65cbd74013961f0b2911d0bc3d",
+        "question": "How many days did it take for World War 2 to end after the death of Alois Burgstaller?",
+        "tag": "Numerical reasoning | Post processing | Temporal reasoning",
+        "gold": "136 days",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": false,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "abf4403e62d54815a538df6286200b32",
+        "question": "Of the top two most watched television season finales (as of June 2024), which finale ran the longest in length and by how much? ",
+        "tag": "Numerical reasoning | Tabular reasoning",
+        "gold": "The MASH finale ran for 52 minutes longer than the Cheers finale.",
+        "correct": true,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "86787c1b5a714962a52ff56c5874bda8",
+        "question": "This individual won a Best Director Award at the 33rd Japan Academy Prize ceremony and is known for having directed a film that briefly surpassed the Godfather as the highest-grossing film in Japan for a short time. Which film was longer - The Godfather or his film - and by how many minutes?",
+        "tag": "Numerical reasoning | Tabular reasoning | Multiple constraints",
+        "gold": "The Godfather (1972) was longer than Submersion in Japan (1973) by 32 minutes.",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": false,
+        "failure_class": "retrieval_or_composition"
+      },
+      {
+        "run_id": "6efa178fb25d4099b83284e2592c0751",
+        "question": "How many more letters are in the first name of the eighth Director of Special Forces (United Kingdom) than the runner who won Silver in the 1985 UK Athletics Championship 10,000 meters event? Give the answer in morse code.",
+        "tag": "Numerical reasoning | Tabular reasoning | Multiple constraints | Post processing",
+        "gold": "....-",
+        "correct": false,
+        "gold_in_report": true,
+        "gold_in_claims": true,
+        "gold_in_chunks": true,
+        "failure_class": "synthesis"
+      },
+      {
+        "run_id": "813702cdca344b1f9b2d8ee59f2bb193",
+        "question": "A United States women's national soccer team player scored her first career international goal during the semi-final match of the 2015 FIFA Women's World Cup. This same player scored her second goal the next year. Tell me the difference in attendance between these two games.",
+        "tag": "Numerical reasoning | Tabular reasoning | Multiple constraints | Post processing | Temporal reasoning",
+        "gold": "43,518",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": false,
+        "failure_class": "retrieval_or_composition"
+      },
+      {
+        "run_id": "d700cd59757a4bf79cb07c31bd8421d9",
+        "question": "As of 1st August 2024, How much younger is the current youngest US House Representative than the American folk hero who died at the Alamo when they were elected to the US House of Representatives?",
+        "tag": "Numerical reasoning | Tabular reasoning | Multiple constraints | Temporal reasoning",
+        "gold": "14 years younger",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": false,
+        "failure_class": "retrieval_or_composition"
+      },
+      {
+        "run_id": "4a62f090427e47c284f3f82a197bce8b",
+        "question": "How many England caps were won by university rugby teammates Will Carling, Chris Oti, and Andy Mullins? Round your answer to the nearest ten.",
+        "tag": "Numerical reasoning | Tabular reasoning | Post processing",
+        "gold": "90",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": false,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "4b6c96bd3c3549568e029f60d6f8a752",
+        "question": "Emory Kristof, the photographer who helped find the Titanic's wreckage, shares an alma mater with a co-creator of Seinfeld. How many years separate their births?",
+        "tag": "Numerical reasoning | Tabular reasoning | Post processing | Temporal reasoning",
+        "gold": "5 years",
+        "correct": true,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "c3326da5bfcf48db98fb49ba645f2e38",
+        "question": "Of all states within New England in the United States, which had a population between 400,000 and 800,000 in 1920?",
+        "tag": "Numerical reasoning | Tabular reasoning | Temporal reasoning",
+        "gold": "Of the 6 states within New England, Maine, New Hampshire, and Rhode Island had populations between 400,000 and 800,000 in 1920.",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": false,
+        "failure_class": "retrieval_or_composition"
+      },
+      {
+        "run_id": "e9f2a58ec42940b6ac22538bc679b2b8",
+        "question": "Who is the male cousin, whose name begins with an L, of the actor who played the murderer in the ITV series White House Farm, and how old was he when he stood in the 2021 London mayoral election?",
+        "tag": "Numerical reasoning | Temporal reasoning",
+        "gold": "Laurence Fox, 42",
+        "correct": true,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "failure_class": "correct"
+      }
+    ]
+  },
+  "musique": {
+    "benchmark": "musique",
+    "database_url": "sqlite+aiosqlite:///./phase2_failure.db",
+    "n_analyzed": 20,
+    "n_correct": 10,
+    "n_missed": 10,
+    "distribution": {
+      "extraction": 6,
+      "correct": 10,
+      "synthesis": 3,
+      "retrieval_or_composition": 1
+    },
+    "per_question": [
+      {
+        "run_id": "85324d4c3a3947a0b1acaf45fc407313",
+        "question": "What is the date of birth of the person who was part of Ratata?",
+        "tag": "2hop",
+        "gold": "11 September 1962",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": true,
+        "failure_class": "extraction"
+      },
+      {
+        "run_id": "e7770a010f4d45108740c027047ee050",
+        "question": "Widely practiced in the region having the second largest rain-forest in the world, how long ago did this religion arrive in Zhejiang?",
+        "tag": "3hop",
+        "gold": "1,400 years",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": true,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "92c045eb8eec4fdabfbf7176e164b779",
+        "question": "When did the town WLUJ is licensed in become capitol of the state where Brantley York was born?",
+        "tag": "4hop",
+        "gold": "1839",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": true,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "4270de46c30d47429944623b6865be51",
+        "question": "What was the resulting browser of the group that owns Mozilla Messaging?",
+        "tag": "2hop",
+        "gold": "Firefox",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": true,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "df9b40b93cef41a4813b97d3a219557f",
+        "question": "How many times did plague occur in the place of death of the creator of Violante?",
+        "tag": "3hop",
+        "gold": "22",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": true,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "f25c08a34e634fc8aa06a2ea5ec4d4bf",
+        "question": "When did the explorer reach the headquarters location of the group Study in Brown's record label is part of?",
+        "tag": "4hop",
+        "gold": "August 3, 1769",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": true,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "4cb99ec17cfd41acbd696b9a790e7bf1",
+        "question": "Who is the spouse of the actor who played hannibal smith in the a team?",
+        "tag": "2hop",
+        "gold": "Sherry Boucher",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": true,
+        "failure_class": "extraction"
+      },
+      {
+        "run_id": "feb93c1c65e848ffba35fc3f9cb3c173",
+        "question": "When did the party Alaska generally supports take control of the determiner of rules of the US House and US Senate?",
+        "tag": "3hop",
+        "gold": "January 2015",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": true,
+        "failure_class": "extraction"
+      },
+      {
+        "run_id": "cd6aa3fb4cbc44a5b538b7e10a7ae2f2",
+        "question": "When did the country with a co-official language used in the film titled after the city that is the final resting place of Tito first attend the Olympics games?",
+        "tag": "4hop",
+        "gold": "2016",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": true,
+        "gold_in_chunks": true,
+        "failure_class": "synthesis"
+      },
+      {
+        "run_id": "1651aa4d972d43738b46df1d7b5f0fb5",
+        "question": "How long did the pact last between Kravchuk and the person who signed the decree suspending the Communist Party of the Russian SFSR?",
+        "tag": "2hop",
+        "gold": "10-year",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": true,
+        "gold_in_chunks": true,
+        "failure_class": "synthesis"
+      },
+      {
+        "run_id": "3a0b0cc3663e40f19920bc07a6a55ad1",
+        "question": "Where do greyhound buses leave from the in the city where the headquarters of the production company which produced A Cosmic Christmas is located?",
+        "tag": "3hop",
+        "gold": "Toronto Coach Terminal",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": false,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "b7ea40a400e74ee8a92391b099bd5630",
+        "question": "Which county shares a border with the county where the most populous city in the state where Redan High School is located?",
+        "tag": "4hop",
+        "gold": "Presque Isle County",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": true,
+        "failure_class": "extraction"
+      },
+      {
+        "run_id": "970e84d0f46141f8ab11486ecc051d71",
+        "question": "When was John's eldest son crowned?",
+        "tag": "2hop",
+        "gold": "1216",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": true,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "5e297e996f78413182cf1eb734c49b6e",
+        "question": "When was the Palau de la Generalitat built, in the place of death of Martin, of the region where Almud\u00e9var was located?",
+        "tag": "3hop",
+        "gold": "built in the 15th century",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": true,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "1daed9cdabfa4ee38d8f2857749beb9f",
+        "question": "When is the all-star game of the league whose member played in the most championship series which proceed the MVP award?",
+        "tag": "4hop",
+        "gold": "July 11, 2017",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": false,
+        "failure_class": "retrieval_or_composition"
+      },
+      {
+        "run_id": "63bb70856d494d1f8cb136352836096e",
+        "question": "Adolf Overweg died in what geological area?",
+        "tag": "2hop",
+        "gold": "Chad Basin",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": true,
+        "failure_class": "extraction"
+      },
+      {
+        "run_id": "2325e928bea745c788386270b4a717be",
+        "question": "What was where the Yongle emperor greeted who the edict addressed GDP per person in 2013?",
+        "tag": "3hop",
+        "gold": "RMB 98,174(US$16041)",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": true,
+        "gold_in_chunks": true,
+        "failure_class": "synthesis"
+      },
+      {
+        "run_id": "37894d4a07814d22b88a6599ba880c30",
+        "question": "Who is the president of the newly declared independent country, that established the Timor Leste Commission of Truth and Friendship, with the country containing the airport that includes Lion Air?",
+        "tag": "4hop",
+        "gold": "Francisco Guterres",
+        "correct": false,
+        "gold_in_report": false,
+        "gold_in_claims": false,
+        "gold_in_chunks": true,
+        "failure_class": "extraction"
+      },
+      {
+        "run_id": "719bb498b7f7480e8f930ccc781e4364",
+        "question": "What was the old show that was named after a character that Walt Disney created in 1928 called?",
+        "tag": "2hop",
+        "gold": "The Mickey Mouse Club",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": true,
+        "failure_class": "correct"
+      },
+      {
+        "run_id": "c89415819e864b6bae5953d3f979cff1",
+        "question": "How many times did the plague occur where the creator of The Entombment died?",
+        "tag": "3hop",
+        "gold": "22",
+        "correct": true,
+        "gold_in_report": true,
+        "gold_in_claims": true,
+        "failure_class": "correct"
+      }
+    ]
+  }
+}

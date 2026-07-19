@@ -1286,3 +1286,500 @@ original single-run result, which is itself the more load-bearing finding than t
 No FRAMES-subset version of this same repeat-3x comparison exists yet (DESIGN.md §10's own flagged
 follow-up, still open).
 ```
+
+# LangGraph migration: real-model mechanics proof, n=3 MuSiQue (2026-07-17)
+
+DESIGN.md decision row 14 (orchestrator hand-rolled asyncio → LangGraph `StateGraph`,
+`src/deepresearch/agent/graph.py`) needed one real-model run to confirm the graph path
+actually works end-to-end against a live provider, not just against the offline
+`StubLLM`-driven test suite (`tests/test_graph_parity.py`, 81/81 passing at migration
+time). This is a **mechanics proof at n=3, not an accuracy ablation** — same spirit as
+this doc's earlier n=2 DeepResearch Bench proof — explicitly scoped that way to keep
+real spend near-zero while both configured providers were being restored from a
+zero-balance state (see below).
+
+**A real bug this exact process caught, fixed before this run**: the first attempt at
+this verification (same day, before top-up) hit `langgraph.errors.GraphRecursionError`
+on a real MuSiQue question — `GraphState`'s `replans`/`step` fields were declared as
+plain `int` instead of `Annotated[int, operator.add]`. A node returning `{"replans": 1}`
+to mean "add one more" instead silently *overwrote* the channel to the literal value 1
+every time (LangGraph's default reducer is last-write-wins, not accumulation) —
+`replan_allowed` never went false, and the loop only stopped via LangGraph's own
+recursion safety net, never the documented stopping criterion (DESIGN.md row 3).
+Confirmed live: one real question produced 10 reflection calls before hitting the
+ceiling. No `StubLLM`-driven test had caught this — the existing replan test only forced
+*one* replan before letting the stub converge, never exercising a second consecutive
+replan where "stuck at 1" diverges from "correctly incrementing." Fixed
+(`Annotated[int, operator.add]` on both fields) and regression-tested
+(`test_replan_ceiling_stops_even_when_llm_never_converges`, a stub that never converges
+on its own so only the `max_replans` ceiling can stop it — verified by reverting the fix
+and confirming this exact test reproduces the `GraphRecursionError`, then confirming the
+fix resolves it).
+
+**Zero-cost check run first, before spending on a real model**: a genuinely concurrent
+3-worker `StubLLM` run through the LangGraph path with real OTel export to Langfuse
+Cloud confirmed `trace_id == run_id` with the expected nested `run → {plan, worker×3,
+reflection, synthesis}` structure (each worker with its own nested `rerank` span) —
+re-verifying, for the new orchestration engine specifically, the same concurrent-context-
+propagation risk DESIGN.md §6 flagged and Session 6 first confirmed for the native path.
+
+## Method
+
+Both configured providers (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`) returned zero
+funded balance earlier this session (`402 Payment Required` / `credit balance too low`,
+confirmed directly against each). After the user topped up OpenRouter, confirmed usable
+with a live 3-token completion call before spending on the real subset.
+
+```bash
+python -m eval.run_eval --benchmark musique --n 3 --seed 42 \
+  --database-url "sqlite+aiosqlite:///./graph_verify_langgraph.db"
+DEEPRESEARCH_ORCHESTRATION=native python -m eval.run_eval --benchmark musique --n 3 --seed 42 \
+  --database-url "sqlite+aiosqlite:///./graph_verify_native.db"
+```
+
+Same model/config as this doc's other real runs: `google/gemini-2.5-flash` (agent
+stages) / `google/gemini-2.5-flash-lite` (judge) via OpenRouter, local corpus, rerank
+enabled, `max_workers=4`, seed 42, n=3 (stratified-by-hop sample, same deterministic
+sampler as every other MuSiQue run in this doc — just the first 3 of it).
+
+## Results (n=3, MuSiQue, real Gemini 2.5 Flash)
+
+| Orchestration | task_completion_rate | mean tokens/task | mean steps/task | `answer_f1` | `answer_f1_extracted` | `answer_contains_gold` | agent cost | wall-clock |
+|---|---|---|---|---|---|---|---|---|
+| `langgraph` | **1.00** | 8047 | 37.3 | 0.104 | 0.933 | 0.667 | $0.0160 | 117.0s |
+| `native` | **1.00** | 8287 | 45.3 | 0.044 | 0.600 | 0.667 | $0.0148 | 173.8s |
+
+Total real spend: **$0.031** for both runs combined (agent + extraction), within the
+~$0.05–0.15 the user approved for this specific check.
+
+## Reading this honestly
+
+- **The one number that matters most here is `task_completion_rate: 1.00` on both** —
+  the graph path completed all 3 questions cleanly with zero crashes and zero
+  budget/recursion exceptions, on the exact real-model path the earlier
+  `GraphRecursionError` came from before the fix. That's what this run was actually
+  for; it isn't sized to say anything about accuracy or cost differences.
+- **n=3 is far too small to read the `answer_f1`/`answer_contains_gold` gaps as a real
+  signal either way** — this doc's own repeat-3x architecture ablation (above) already
+  demonstrated that even n=20 single-run comparisons on this exact metric family sit
+  well within one repeat's worth of noise (the react-vs-plan-first finding fully
+  reversed between a single n=20 run and a repeat-3x version). n=3 is smaller still;
+  reading "langgraph scored higher" out of this table would repeat the exact mistake
+  that repeat-3x section exists to warn against.
+- **`answer_contains_gold` matching exactly (0.667 both)** is a mildly reassuring
+  mechanics signal — both orchestration paths reached the same correct/incorrect
+  verdict on all 3 questions — but is not a substitute for the real, larger,
+  properly-repeated PR-smoke + ablation run DESIGN.md row 14 still calls for before
+  the migration's behavior-neutrality claim is fully closed.
+- **What this doesn't test**: the real n=20+20 PR smoke gate against `ci_baseline.json`,
+  a repeated (3-5x) langgraph-vs-native ablation, and a reliability-subset run on the
+  graph path — all still open, gated on real spend beyond what this specific proof was
+  scoped to.
+
+## Reproducing
+
+```bash
+pip install -e ".[dev,eval]"
+python -m eval.run_eval --benchmark musique --n 3 --seed 42 --database-url "$DATABASE_URL"
+DEEPRESEARCH_ORCHESTRATION=native python -m eval.run_eval --benchmark musique --n 3 --seed 42 --database-url "$DATABASE_URL"
+```
+
+# Phase 2, Session 1: failure-mode analysis + citation-regex fix (2026-07-18)
+
+Requirement-2 work ("improve the scores") is gated by the project's own rule
+(DESIGN.md §7): don't build a score lever before failure-mode data says which
+failure it addresses. This session built that data rather than guessing at levers.
+
+**A latent Phase-1 regression, fixed first.** `eval/metrics/citation.py`'s
+`CITATION_MARKER_RE` was `\[(src_\d+)\]` — digit-only, so it silently missed the
+namespaced `[src_1abe120f_1]` markers Phase 1's parallel-worker fix introduced on
+the LangGraph default path. FRAMES `citation_coverage`/`precision` would have read
+~0 on every graph-path run. Widened to `\[(src_\w+)\]`, regression-locked in
+`tests/test_eval_metrics.py`. The real run below is the live confirmation: FRAMES
+`citation_coverage=0.702`, `precision=0.758` on graph-format reports (non-zero =
+fix works).
+
+**The failure-analysis tool** (`scripts/failure_analysis.py`, read-only, no LLM):
+for each missed FRAMES/MuSiQue question it recovers question/sub-questions/report/
+claims from the run store, matches to gold via the deterministic samplers, re-runs
+*retrieval only* (BM25 + bge rerank, no LLM) using the run's own stored config, and
+classifies the miss as **retrieval_or_composition** (gold never in the reranked
+chunks — either retrieval missed it or, for computed/multi-hop answers, it never
+appears verbatim), **extraction** (gold was in a chunk but no worker claim captured
+it), or **synthesis** (a claim captured it but the final answer is still wrong).
+Validated free on `sanity_check.db` (Sonnet-5, n=20+21) before spending.
+
+**Fresh real batch** on the current config (Gemini 2.5 Flash, LangGraph path,
+`--mode smoke`, 20+20, `phase2_failure.db`): FRAMES accuracy 0.45 (identical to the
+committed native `ci_baseline.json` — a Phase-1 behavior-neutrality data point),
+MuSiQue `answer_contains_gold` 0.50 / `answer_f1_extracted` 0.415. `task_completion`
+1.0 both. Cost **$0.233** agent+judge.
+
+## Failure distribution (current Gemini config, `results/failure_analysis_20260718T111024Z.json`)
+
+| Benchmark | Correct | retrieval_or_composition | extraction | synthesis |
+|---|---|---|---|---|
+| FRAMES | 9/20 | 9 (82% of misses) | 1 (9%) | 1 (9%) |
+| MuSiQue | 10/20 | 1 (10%) | 6 (60%) | 3 (30%) |
+
+## Reading this honestly
+
+- **FRAMES misses are dominated by composition, not retrieval.** 82% are
+  gold-never-in-any-chunk, and the sanity-check spot-check showed these are almost
+  all `Numerical reasoning` questions whose gold answer is a *computed* value ("14
+  years younger", "43,518") that no source states verbatim. **Graph retrieval /
+  better rerank would not move these** — this is exactly the evidence DESIGN.md §7
+  gates the graph-retrieval experiment on, and it points *away* from building it.
+  The dominant FRAMES lever is a reasoning/compute step, not retrieval.
+- **MuSiQue misses are extraction-dominated (60%).** The gold fact *was* in a chunk
+  the worker saw, but no worker claim captured it — points at the worker prompt /
+  model tier, not retrieval. Synthesis is a real secondary lever (30%: worker
+  captured the fact, the report dropped it).
+- **`retrieval_or_composition` deliberately conflates two things** (true retrieval
+  miss vs. verbatim-absent computed answer); the per-question JSON keeps
+  `gold_in_chunks`/`tag` so a spot-check separates them. `gold_contained` is a
+  normalized-substring proxy for correctness, preferring stored judge scores when
+  present.
+- **This is single-run n=20 per benchmark** — enough to rank failure *modes* (the
+  splits are lopsided, not marginal), not to quantify a lever's effect; that needs
+  the repeat-3x discipline this doc applies elsewhere, applied per-lever next.
+
+## Reproducing
+
+```bash
+python -m eval.run_eval --mode smoke --database-url sqlite+aiosqlite:///./phase2_failure.db
+python scripts/failure_analysis.py --database-url sqlite+aiosqlite:///./phase2_failure.db
+# --no-rerun-retrieval skips the ~30s/miss CPU rerank (leaves misses unsplit); --limit N caps questions
+```
+
+**Next (lever selection, not yet done — the data ranks these):** worker-extraction
+lever (prompt + model-tier, MuSiQue-first) and a FRAMES numerical-reasoning
+compute/verify step are the two the data supports; graph retrieval is *not*
+indicated. Scope/budget for the lever ablations is a separate decision.
+
+# Phase 2, lever 1 — worker extraction prompt (measured a wash, reverted) (2026-07-18)
+
+First lever tried against the MuSiQue extraction misses: give the worker the overall
+research question (it currently sees only its narrow sub-question) and a `worker_v2`
+prompt telling it to extract salient cross-hop facts instead of returning empty
+`open_gaps`. Rationale came from reading the actual failure traces (e.g. the "member
+of Ratata" DOB worker had "11 September 1962" in a retrieved chunk but returned
+`open_gaps` because it didn't know the date was relevant to the end goal).
+
+**Result (n=20 MuSiQue, seed 42, vs the 0.50/0.415 baseline): a wash.**
+`answer_contains_gold` 0.50→0.50, `answer_f1_extracted` 0.415→0.432 (within noise), at
+**+20% tokens/cost**. The case inspection showed why: it fixed failures where the
+bridging fact sat in a retrieved chunk (Adolf Overweg → now extracts "Chad Basin"),
+but couldn't fix the ones where a *dependent* sub-question retrieves the wrong chunks
+because the entity isn't resolved yet (the Ratata "DOB of each member" worker never
+fetches Mauro Scocco's page — it doesn't know to search for him). **Reverted** (no
+aggregate gain shouldn't cost +20%). The real finding: the dominant bottleneck is
+**multi-hop dependency chaining**, which a worker prompt can't fix — it's a
+planning/orchestration problem. That motivated lever 2.
+
+# Phase 2, lever 2 — multi-hop self-corrective ReAct agent (`agent_mode=react_agent`) (2026-07-18)
+
+Built a tool-calling agentic-RAG ReAct agent (`agent/react_agent.py`, DESIGN.md row 2):
+LangGraph `StateGraph` with the prebuilt **`ToolNode`** executing a single `search`
+tool, a ReAct loop where the model refines each query with entities resolved from
+prior results (sequential multi-hop — the exact thing plan-first's parallel
+decomposition can't do), a `finalize` node producing the structured cited report, and
+a **self-correcting `verify` node** (reflection: is every hop answered & grounded?)
+that loops back to search more, bounded by `max_corrections` + the budget ceilings.
+The agent's tool-calling node uses a LangChain `ChatOpenAI` at OpenRouter (ToolNode
+needs LangChain-format tool_calls, which the httpx `LLMClient` doesn't emit); its
+`usage_metadata` is mapped through the same `_cost` table so accounting is consistent.
+finalize/verify keep the `LLMClient`. Retrieval is the *same* `retrieve.retrieve_chunks`
+the plan-first worker uses, so the ablation isn't confounded by two retrieval paths.
+
+**Behavior check first** (the Ratata 2-hop that plan-first fails): the agent searched
+"members of Ratata" → resolved Mauro Scocco → reported his birth date correctly, cited,
+`verify` judged it sufficient, $0.0024. (Scored 0 on `answer_contains_gold` only because
+of date *formatting* — gold "11 September 1962" vs the agent's "September 11, 1962",
+identical date; the judge-extracted F1 metric credits it, the blunt substring check
+doesn't — a metric nuance that if anything *under*counts react_agent.)
+
+## Results (n=20 MuSiQue, seed 42, real Gemini 2.5 Flash) — `results/eval_custom_20260718T*.json`, `phase2_react_agent.db`
+
+| Metric | plan_first (baseline) | react_agent | Δ |
+|---|---|---|---|
+| `answer_contains_gold` | 0.50 | **0.60** | **+0.10** |
+| `answer_f1_extracted` | 0.415 | **0.457** | +0.042 |
+| `answer_f1` (raw) | 0.069 | 0.056 | −0.013 |
+| task_completion_rate | 1.00 | 1.00 | = |
+| mean tokens/task | 9,035 | 20,391 | +126% |
+| agent cost (20q) | $0.112 | $0.205 | +83% |
+| wall-clock (20q) | 656s | 613s | −7% |
+
+**Per-question flip analysis (same 20 questions):** react_agent 12/20 correct vs
+plan-first 10/20. It **fixed 4** dependency-chained misses — two of them the hardest
+**4-hop** questions, plus two 2-hop — and **regressed 2** (a 4-hop and a 3-hop where
+plan-first's breadth won). Net +2, and the fixes land squarely on the multi-hop class
+the design targets — mechanism-confirmed, not an aggregate coincidence.
+
+## Reading this honestly
+
+- **This is a real, mechanism-confirmed accuracy gain on multi-hop, at a real cost
+  premium.** +10pts `contains_gold` / +4.2pts extracted-F1, fixing the hard 4-hop
+  dependency chains, for ~2x tokens and +83% cost (multi-hop search + finalize +
+  verify loops). Wall-clock is actually slightly *better* (no parallel-worker rerank
+  contention). That's a genuine accuracy/cost tradeoff, not a free win.
+- **Single-run n=20 is not yet conclusive.** This repo's own repeat-3x ablation
+  measured ±12.6pt run-to-run variance on `contains_gold` at n=20 — a +10pt single-run
+  gain sits at the edge of that. The per-question analysis (fixing 4-hop chains
+  specifically) is stronger evidence than the aggregate alone, but the disciplined
+  confirmation is a **repeat-3x** run before any default change (DESIGN.md row 2's
+  stated bar). **Not run yet** — flagged as the next step, gated on spend.
+- **The default stays `plan_first`.** Row 2's bar is accuracy parity *at lower/comparable
+  cost*; react_agent wins accuracy at higher cost, so it ships as an additive,
+  measured alternative, not the new default — pending the repeat-3x + a cost/accuracy
+  call.
+- **What this doesn't cover**: no FRAMES react_agent run yet (FRAMES misses are
+  numerical composition, a different lever); no repeat-3x; `scripts/failure_analysis.py`
+  can't yet classify react_agent runs (it recovers sub-questions from `worker`
+  trajectories, which the agent doesn't produce — it uses `agent_step` + search
+  tool_calls; a small tool enhancement, not done).
+
+## Reproducing
+
+```bash
+DEEPRESEARCH_AGENT_MODE=react_agent python -m eval.run_eval --benchmark musique --n 20 --seed 42 \
+  --database-url sqlite+aiosqlite:///./phase2_react_agent.db
+```
+
+# Phase 2, lever 2b — a `calculate` tool for FRAMES numerical reasoning (measured a wash) (2026-07-18)
+
+The other open failure mode was FRAMES: 82% of misses are *computed* answers no source
+states verbatim ("14 years younger", "43,518"), which a search-only agent structurally
+can't produce. Added a second tool to react_agent's `ToolNode` — `calculate(expression)`,
+a safe AST-whitelist arithmetic/comparison evaluator (never `eval()`; +-*/// % **,
+comparisons, abs/round/min/max; injection-refusal unit-tested). The agent searches for
+the operand facts, then calls `calculate` for the exact result. General capability, no
+benchmark conditioning; both tools available on every run.
+
+**The tool works and is genuinely used.** 7 calls across 6 of the 20 FRAMES questions,
+on real numerical reasoning: `1847 - 1812 = 35`, day-counting `11 + 31 + 30 + 31 + 31 +
+2 = 136`, `2.5 * 60 = 150`, `round((72 + 13 + 1) / 10) * 10 = 90`. One attempt failed —
+`days_between('1945-04-19', '1945-09-02')` — the evaluator has no date arithmetic (a
+real, un-closed gap for FRAMES date-difference questions).
+
+## Results (n=20 FRAMES, seed 42, real Gemini 2.5 Flash) — `phase2_react_frames.db`
+
+| Metric | plan_first (baseline) | react_agent + calculate | Δ |
+|---|---|---|---|
+| `accuracy` (LLM-judged) | 0.45 | 0.45 | **0.00** |
+| `citation_coverage` | 0.702 | 0.581 | −0.121 |
+| `citation_precision` | 0.758 | 0.548 | −0.210 |
+| mean tokens/task | 10,714 | 34,104 | +218% |
+| agent cost (20q) | $0.117 | $0.276 | +136% |
+
+**Per-question flip:** both 9/20 correct. `calculate` **fixed 4** numerical questions,
+but react_agent **regressed 4** others — a wash.
+
+## Reading this honestly
+
+- **The `calculate` tool did its job; react_agent as a whole did not help FRAMES.** The
+  tool fixed the 4 questions that were pure arithmetic-over-gathered-facts. But
+  react_agent's *sequential* search regressed 4 others, and citations dropped sharply —
+  because **FRAMES rewards retrieval breadth** (2–15 articles per question, gather many
+  independent facts), which plan-first's *parallel* worker pool does well and a
+  one-query-at-a-time agent sacrifices. Net accuracy unchanged, at 2.4x cost and worse
+  grounding.
+- **The load-bearing insight: topology should match question shape.** react_agent
+  (sequential depth + self-correction) wins MuSiQue's *dependency chains* (+10pts,
+  above); plan-first (parallel breadth) wins FRAMES's *wide multi-doc* questions. This
+  is why the design keeps plan-first the default and ships react_agent as an additive,
+  config-selectable mode rather than a replacement — the right agent depends on whether
+  the workload is depth-heavy or breadth-heavy. A future router could pick per-question;
+  not built (no metric yet says the routing itself is worth its complexity).
+- **`calculate` stays** (it's correct, cheap when unused, and the FRAMES-numerical fix
+  is real) — but it doesn't move the FRAMES aggregate on its own, and the date-arithmetic
+  gap is left open, documented rather than hidden.
+
+## Reproducing
+
+```bash
+DEEPRESEARCH_AGENT_MODE=react_agent python -m eval.run_eval --benchmark frames --n 20 --seed 42 \
+  --database-url sqlite+aiosqlite:///./phase2_react_frames.db
+```
+
+## 2026-07-18 — unified planner→supervisor→subagent→verify→synthesis→reflection rebuild
+
+Direct response to this doc's own "topology should match question shape"
+finding immediately above: rather than ship plan-first (parallel breadth) and
+react_agent (sequential depth) as two config-selectable modes and leave the
+router-vs-fixed-default question unresolved, this rebuild collapses them into
+**one** graph where the *supervisor* — not a global mode flag — decides
+parallel-vs-sequential dispatch per plan node, based on the node's actual
+`depends_on` edges. Independent facets (FRAMES-shaped breadth) still fan out
+in parallel; dependent chains (MuSiQue-shaped depth) still resolve hop by hop
+with entity substitution; both live in the same DAG.
+
+**What this session actually measured: none of it against a real model.**
+Every claim below is offline-only — stubbed structured-JSON LLM responses and
+a stubbed LangChain chat model, no network, no `ANTHROPIC_API_KEY` /
+`OPENROUTER_API_KEY` spent. This is a harness-correctness/mechanics
+verification pass (does the graph wire together, does the checkpointer
+actually resume, do the readiness/verify/reflection gates fire when they
+should), the same caveat this doc has flagged on every `FakeLLMClient`-era
+entry above — read it the same way: real control flow, zero quality signal.
+
+**Full test suite: 94/94 green** (`tests/test_planner.py`,
+`test_subagent.py`, `test_graph.py`, `test_checkpointer.py`,
+`test_orchestrator_persistence.py`, plus the pre-existing suite untouched by
+this rebuild). Specific mechanics proven, not merely asserted-in-code:
+
+- **Wave sequencing**: a 3-node DAG (2 independent lookups + 1 node
+  depending on both) dispatches the two independent nodes together and the
+  dependent node only after both upstreams are verified, with the
+  dependent node's brief provably containing both upstream answers
+  (`facts_for()` injection).
+- **Per-hop verify gate**: a node feeding a later hop is gated by a paid
+  grounding check; a leaf node (nothing depends on it) is marked verified
+  for free — a forced verify-fail requeues the node exactly once before
+  succeeding; a verify that never passes gives up cleanly at the
+  `max_corrections` boundary and the run still reaches synthesis rather
+  than hanging.
+- **Dependency-ordered synthesis + bounded reflection**: findings are fed
+  to synthesis in topological order regardless of the order waves actually
+  completed in; a detected report gap spawns exactly one bounded follow-up
+  wave then confirms clean; a reflection that never converges is capped by
+  `max_reflect`, not an unbounded loop.
+- **Checkpointer**: a run interrupted right after `plan` (via LangGraph's
+  own `interrupt_after`, not a manually-raced async generator) resumes from
+  that exact checkpoint in a **fresh graph object** — proven by a
+  call-counting stub showing `plan_node` never re-executes on resume — and
+  a different `thread_id` against the same checkpointer file starts a
+  genuinely independent run.
+
+**Two real bugs caught by this session's own tests, before any live-model
+run** (both introduced by this rebuild's new code, not pre-existing —
+neither surfaced until a test exercised a genuine multi-turn tool-calling
+loop with a live budget check):
+
+1. The supervisor's `Send` payload to each subagent never carried
+   `started_monotonic` forward, so every subagent's inner ReAct loop
+   computed elapsed wall-clock time from epoch zero on its first budget
+   check — instantly (and silently) tripping the wall-clock ceiling and
+   skipping every tool call after exactly one turn. A test asserting
+   `search`/`fetch` tool_calls actually got recorded (ported from the old
+   worker-based persistence test) caught this: the finding came back with
+   `"(no passages retrieved)"` even though the stub chat model had
+   requested a search.
+2. The `search`/`calculate` tools recorded `tool_calls.span_id` from a
+   static value captured once when the run's context was built, instead of
+   the OTel span actually active at call time — breaking the invariant
+   (already covered by an existing test) that every `tool_calls` row's
+   `span_id` names a real `trajectories` row it nests under.
+
+Both are now fixed and covered by regression assertions in the tests above.
+
+**Not yet done — the actual accuracy question**: a same-day follow-up (next
+entry below) ran one real 2-hop question live and it worked correctly
+end-to-end — a genuine smoke-level signal that the rebuild functions against
+a real model, not just stubs. But that is one hand-picked question, not a
+benchmark. Still open: does the unified graph capture react_agent's measured
+MuSiQue multi-hop win (+10pts `answer_contains_gold`, above) without paying
+its ~2x-token/+83%-cost premium on FRAMES-shaped independent-facet
+questions? That requires a live-model run (MuSiQue + FRAMES smoke subsets,
+scored per-hop) — not performed this session, and the honest gate before
+citing this rebuild as a quality improvement rather than a harness change.
+
+**Reproducing** (offline, no key required):
+
+```bash
+python -m pytest tests/test_planner.py tests/test_subagent.py tests/test_graph.py \
+  tests/test_checkpointer.py tests/test_orchestrator_persistence.py -q
+```
+
+## 2026-07-18 (same day, follow-up) — Instructor for structured output; first live-model verification
+
+Two follow-ups to the rebuild above, done in the same session. First: a live
+smoke test against a real model (`google/gemini-2.5-flash` via OpenRouter,
+the key already configured in `.env`), the first real-model run of the
+unified graph — everything above this entry had been offline/stubbed only.
+Second: `llm/client.py`'s `complete_json` was rewritten around the
+`instructor` library (`response_model=<PydanticModel>` instead of a
+hand-maintained JSON-schema dict + manual `json.loads`), renamed
+`complete_structured`, with the same behavior-preservation discipline as the
+graph rebuild — verify before trusting, don't assume a library's default is
+correct.
+
+**First live run, before the Instructor swap** (still the old hand-rolled
+`output_config`/`response_format: json_schema` path): a 2-hop dependency
+question — "What year was the lead singer of the Swedish pop group Ratata
+born in?" against a 2-document `LocalCorpusBackend` — completed correctly
+end-to-end. Real planner produced the correct DAG (`n1`: find the singer,
+independent; `n2`: find the birth year, `depends_on: ["n1"]`); `facts_for()`
+correctly injected "Mauro Scocco" into n2's brief; both hops verified
+(confidence 1.0); reflection ran once and correctly found no gaps; synthesis
+produced a correctly-cited one-sentence answer. Cost: $0.0038, 6,942 tokens,
+`COMPLETED`. This is the first evidence (beyond offline test mechanics) that
+the rebuilt graph actually works against a real model on the exact scenario
+it was built for.
+
+**A real bug the Instructor swap surfaced, caught before it shipped**:
+Instructor defaults to `Mode.TOOLS` (forcing a synthetic tool call shaped
+like the Pydantic model) for both its Anthropic and OpenAI-compatible
+clients. Live-tested directly against this project's actual nested
+`Plan{sub_questions: list[SubQuestion]}` schema on `google/gemini-2.5-flash`:
+`Mode.TOOLS` (and `Mode.TOOLS_STRICT`) consistently **flattened every
+`SubQuestion` into a plain string** instead of a nested object — across 4
+retries (Instructor's automatic validation-retry, which re-prompts the model
+with the validation error), the model never converged; one retry attempt
+even tried jamming a JSON-encoded string *inside* the string slot, getting
+worse, not better. Switching to `Mode.JSON_SCHEMA` (the API's native
+structured-output/constrained-decoding feature — the same mechanism the
+pre-Instructor code already used natively) fixed it immediately, first try.
+**Lesson recorded for future work with Instructor**: never leave the mode at
+its library default for a nested-object schema without testing against the
+actual model in use — a smaller/cheaper model's function-calling schema
+generation can silently fail to preserve nesting, and the failure mode
+(flattened strings, retried into worse attempts) doesn't look like an
+obvious "this library is broken" signal, it looks like the model being
+confused, so it's easy to misattribute.
+
+**Second live run, after the fix** (`Mode.JSON_SCHEMA` for OpenRouter,
+`Mode.ANTHROPIC_JSON` chosen by the same reasoning for the Anthropic/Bedrock
+path but **not live-verified this session** — Anthropic credit still
+exhausted, per the caveat above): identical question, same corpus. Same
+correct DAG, same correct dependency injection (`entities_extracted:
+{'lead_singer': 'Mauro Scocco', 'group': 'Ratata'}`), same verified findings,
+same correctly-cited report. Cost: $0.00379, 6,952 tokens — within
+rounding of the pre-Instructor run. **Net: Instructor is a drop-in
+replacement at parity cost, once the mode is pinned correctly** — the
+hand-maintained JSON-schema dicts are gone (Pydantic models are now the
+single source of truth for every structured LLM call in the codebase:
+`Plan`, `FindingDraft`, `HopVerdict`, `GapCheck`, `SynthesisDraft`,
+`AccuracyVerdict`, `CitationVerdict`, `ShortAnswer`, `RaceScores`), and every
+call now gets automatic validation-retry for free.
+
+**Reproducing** (live, needs `OPENROUTER_API_KEY` in `.env`):
+
+```bash
+python -c "
+import asyncio
+from deepresearch.agent.orchestrator import run_research
+from deepresearch.backends.local_corpus import LocalCorpusBackend
+from deepresearch.config import RunConfig
+from deepresearch.telemetry.otel_setup import init_telemetry
+
+DOCS = [
+    {'doc_id': 'd1', 'title': 'Ratata', 'text': 'Ratata is a Swedish pop group fronted by Mauro Scocco.'},
+    {'doc_id': 'd2', 'title': 'Mauro Scocco', 'text': 'Mauro Scocco was born on 11 September 1962 in Stockholm, Sweden.'},
+]
+
+async def main():
+    init_telemetry()
+    config = RunConfig(cache_enabled=False, rerank_enabled=False)
+    backend = LocalCorpusBackend.from_dicts(DOCS)
+    result = await run_research(
+        'What year was the lead singer of the Swedish pop group Ratata born in?',
+        config=config, search_backend=backend,
+    )
+    print(result.status, result.report.text if result.report else None)
+
+asyncio.run(main())
+"
+```
+

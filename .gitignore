@@ -9,6 +9,17 @@ trajectories/*.json
 !trajectories/.gitkeep
 *.db
 *.db-journal
+# LangGraph AsyncSqliteSaver checkpoint files (config.checkpoint_db_path,
+# default ./checkpoints.sqlite) — a separate persistence store from the
+# eval/run-store *.db files above, same reason to never commit it.
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+# Transient run/benchmark console logs captured at the repo root (e.g.
+# full_run_frames.log, directml_smoke_musique.log) — the durable record is
+# the run-store DB + results/*.json, never these raw stdout dumps.
+*.log
 
 # data/corpus/ is normally regenerated on demand from HF Hub + Wikipedia
 # (eval/benchmarks/{frames,musique}.py), but the smoke/full subset actually
@@ -26,6 +37,10 @@ data/corpus/*
 # Claude Code local tooling config/skills — not part of the project deliverable,
 # and settings.local.json specifically is meant to be per-machine, not shared.
 .claude/
+
+# Reranker ONNX export/weight cache (rerank/bge_directml.py builds this on
+# first run) — a large regenerable model artifact, never a source deliverable.
+.cache/
 
 # Terraform: state/plan binaries and real secrets never belong in git.
 # docs/proof/plan.txt is a redacted *text* export, committed deliberately.

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class SubQuestion(BaseModel):
     id: str
     question: str
+    depends_on: list[str] = Field(default_factory=list)
 
 
 class Plan(BaseModel):
@@ -38,6 +39,17 @@ class WorkerNotes(BaseModel):
     sub_question: str
     claims: list[Claim]
     open_gaps: list[str] = Field(default_factory=list)
+
+
+class Finding(BaseModel):
+    node_id: str
+    question: str
+    answer: str
+    claims: list[Claim]
+    entities_extracted: dict[str, str] = Field(default_factory=dict)
+    confidence: float
+    open_gaps: list[str] = Field(default_factory=list)
+    verified: bool = False
 
 
 class ReflectionResult(BaseModel):
@@ -85,6 +97,7 @@ class RunResult(BaseModel):
     question: str
     plan: Plan
     worker_notes: list[WorkerNotes]
+    findings: list[Finding] = Field(default_factory=list)
     reflections: list[ReflectionResult]
     report: Report | None = None
     budget_hit: str | None = None

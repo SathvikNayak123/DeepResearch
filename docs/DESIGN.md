@@ -35,9 +35,9 @@ out."
 
 | # | Decision | Chosen | Alternatives considered | Why | Evidence that would change my mind |
 |---|---|---|---|---|---|
-| 1 | **Topology** | Orchestrator + bounded parallel sub-question worker pool (max 4–6 concurrent) | Single agent with tools, sequential ReAct over the whole question | Multi-hop deep-research questions decompose into largely independent sub-topics. A single sequential agent pays linear wall-clock latency per sub-topic and mixes unrelated sub-topic context in one transcript, which both slows synthesis and risks context dilution. Parallel workers bound each worker's context to one sub-question and give a natural per-sub-question trajectory unit for eval. | Session 4's plan-first-vs-ReAct ablation on the smoke set shows a single-agent loop matches orchestrator-worker accuracy at meaningfully lower token/latency cost — i.e., most benchmark questions have ≤1 effectively independent sub-question and parallelism buys nothing. If so, collapse to single-agent+tools, keep the worker pool as an opt-in escalation path for detected multi-topic queries. |
-| 2 | **Planning style** | Plan-first (explicit research plan artifact) with bounded re-planning (≤2 replans) triggered by reflection | Interleaved ReAct (no upfront plan, one reason/act step at a time) | An explicit plan is a scorable artifact — coverage self-check needs something to check coverage *against*. It also gives an upfront estimate of tool-call/token budget (derivable from planned sub-question count) and clean per-sub-question trajectory attribution. Cost: commits early to a possibly wrong decomposition, mitigated by bounded re-planning. | Same ablation as #1: if ReAct matches plan-first on accuracy/citation-precision at lower cost on the FRAMES/MuSiQue smoke set, default switches to ReAct; plan-first becomes the experimental branch. |
-| 3 | **Stopping criteria** | Three explicit, configurable gates checked every reflection loop, first-to-trip wins: (a) `max_replans` (default 2), (b) coverage self-check score ≥ threshold (default 0.8, LLM-judge scored against the plan's sub-questions), (c) budget ceiling (`max_tokens`, `max_usd` per run) | "Agent decides when it's done" (no explicit criterion); fixed iteration count only; budget ceiling only | "The agent decides" is unmeasurable and unreproducible — can't be evaluated, can't be capped for cost safety, can't be regression-tested. Iteration-only ignores whether coverage was actually reached (wastes budget or stops too early). Budget-only has no quality signal. | Session 4 measurement shows coverage self-check score is uncorrelated with downstream citation-accuracy/RACE-style report score (i.e., it's a bad proxy). Replace with a cheaper heuristic (diminishing new-source-discovery rate) or drop it, keeping iteration + budget as the remaining gates. |
+| 1 | **Topology** (superseded 2026-07-18, see §11) | Supervisor + readiness-gated dependency-DAG dispatch, one topology for both breadth and depth (`agent/graph.py`): the planner emits a dependency graph of retrieval nodes (`SubQuestion.depends_on`); a supervisor router recomputes, every wave, which nodes have all dependencies verified and fans those out in parallel via `Send` (bounded by `max_workers`), while a node needing an unresolved upstream answer simply isn't ready yet and waits — no separate "parallel mode" vs. "sequential mode" | The prior bounded-parallel-pool-only topology (row 1 as originally written, kept below for history); a single sequential ReAct agent over the whole question | The old pool topology fanned out *every* sub-question in one batch, which cannot express "hop 2 needs hop 1's answer" — a dependent hop fired blind, retrieving garbage for an unresolved entity. This is this project's own measured multi-hop failure mode (docs/RESULTS.md Phase-2: 60% of MuSiQue misses were exactly this). Making the DAG explicit and gating dispatch on readiness fixes it while keeping independent sub-questions genuinely parallel — not a tradeoff between the two, both fall out of the same readiness computation. | A measured run shows the readiness-gated dispatch adds material overhead (extra waves, wasted waiting) on questions that are actually all-independent, relative to the old one-shot fan-out — i.e., the DAG machinery costs more than it buys on the common case. Response: keep a fast path where an all-independent plan (no `depends_on` edges at all) dispatches in one wave, which the current readiness computation already does for free. |
+| 2 | **Planning style** (superseded 2026-07-18, see §11) | One planner, one topology: the planner emits a dependency DAG (single node for a simple lookup, a fast path); each node's research is done by a tool-calling ReAct subagent (`agent/subagent.py` — the same primitives the old `react_agent.py` mode used: `search`/`calculate` tools via LangGraph `ToolNode`), so **every** hop gets real sequential entity-substituting multi-hop *and* independent facets still run in parallel — the plan-first-vs-react_agent split is gone, folded into one design | Kept for history: plan-first with a parallel-only worker pool + bounded coverage-triggered replanning (row 2 as originally written); a separate additive `react_agent` config mode | The old split forced a choice per-run between "parallel but can't chain dependent hops" (plan-first) and "chains hops correctly but no parallelism, ~2x cost" (react_agent) — the measured reversal signal below showed react_agent won accuracy on genuinely multi-hop questions but at real cost, and there was no way to get both without running two separate architectures. The dependency-DAG topology (row 1) removes the false choice: a node is ReAct (so it chains hops correctly when it needs to) but the *supervisor*, not the node, decides parallel vs. sequential dispatch per-node based on real dependencies — independent facets don't pay the sequential cost, dependent ones don't fail silently. | The measured **2026-07-18 pre-rebuild** signal that motivated this (kept as the evidence trail): `react_agent` beat the old plan-first on MuSiQue n=20 — `answer_contains_gold` 0.60 vs 0.50 (+10pts), `answer_f1_extracted` 0.457 vs 0.415 — fixing 4 dependency-chained misses (incl. two 4-hop), at ~2x tokens / +83% cost. A live-model run of the *new* unified graph against the same MuSiQue slice, scored per-hop (not just final answer), is the next measurement that would validate (or reverse) that this rebuild actually captured react_agent's accuracy gain without paying its full cost premium on all-independent questions — not yet run against a real provider (this session was tested offline only; see §11). |
+| 3 | **Stopping criteria** (revised 2026-07-18, see §11) | Per-scope explicit ceilings, first-to-trip wins at each scope: per-hop `max_corrections` (requeue a node whose verify failed, bounded), per-run `max_reflect` (bounded post-synthesis follow-up waves), per-plan `max_nodes` (planner over-decomposition guard), plus the budget ceiling (`max_total_tokens`, `max_usd`, `max_wall_clock_seconds`) checked as a pure state read at every dispatch decision | "Agent decides when it's done" (no explicit criterion); the old single coverage-self-check score ≥ threshold gate | "The agent decides" is unmeasurable and unreproducible. The old single coverage-score gate (LLM-judge scored against the whole plan, pre-synthesis) was **dropped**, not just retuned: Session 4 had already measured it as uncorrelated with downstream citation-accuracy/RACE-style report score — a bad proxy — so this rebuild replaced it with gates scoped to where they actually catch something: per-hop grounding (verify), per-run report-gap-closure (reflection), never a single global "coverage" number standing in for both. | A live-model run shows the per-hop/per-run gates above let genuinely incomplete reports through more often than the old coverage gate did (i.e., the replacement lost a real signal, not just a bad proxy) — measured via citation-precision or RACE-style score regressing at the same budget. Response: reintroduce a scoped coverage check, but validated against citation-accuracy first this time, not assumed. |
 | 4 | **Context management** | Structured note-taking: each worker returns `{sub_question, claims:[{text, source_id, quote, confidence}], open_gaps}`, never a raw transcript. Token budgets enforced per stage (plan in ≤1k / out ≤500; worker in ≤8k / out ≤1k; synthesis in ≤ plan + Σ worker notes, independent of raw content volume touched) | Full-transcript stuffing into synthesis | Full-transcript cost scales with number of sub-questions × sources touched, risking context-window blowup and diluting synthesis attention across irrelevant raw text. Structured notes bound synthesis input regardless of how much a worker read. | Smoke-set measurement shows structured notes measurably drop citation-accuracy vs. full-transcript baseline by more than the token/cost savings justify. Response: enrich the note schema (longer quotes, more claims) before reverting to full-transcript. |
 | 5 | **Search tooling** | Tavily as primary backend (combined search+extract, LLM-ready Markdown, relevance scoring), behind a `SearchBackend` protocol with a `LocalCorpusBackend` for fixed-corpus benchmark/CI runs | Brave Search API (SERP-only, no extraction, free tier removed Feb 2026), SerpApi (250 free searches/mo, snippets only, throughput capped at 20%/plan-hour) | Tavily is the only one of the three that returns clean extracted content in one call — Brave/SerpApi require building and maintaining a separate scrape/clean stage, which is pure ops burden for a solo engineer with no accuracy upside. Tavily's free tier (1,000 credits/mo) covers dev iteration. | Spot-check of Tavily extraction quality on a sample of research questions shows it's meaningfully worse than a scraped-Brave-result baseline (measured via citation-accuracy delta), or free-tier credits are exhausted faster than dev iteration allows. |
 | 6 | **Citation grounding** | Synthesis output is structured: every claim references a `source_id` from a fetched-doc registry populated at fetch time. Post-hoc automatic checker (FACT-protocol style) reports citation *coverage* (% claims with ≥1 citation) and citation *precision* (% cited claims an LLM judge confirms are entailed by the cited source) | Free-form inline URL citations in prose | Free-form citations are regex-fragile to parse and make coverage/precision unreliable to compute — directly undermines the "measurable claim→source mapping" requirement this whole project is built around. | Structured-output constraints measurably hurt RACE-style readability/quality scores more than the measurability gain is worth. Response: relax to lightweight footnote markers only, keep the source registry for auditability. |
@@ -48,8 +48,12 @@ out."
 | 11 | **DeepResearch Bench cadence** | Fixed 10-question EN-only subset (`--only_en --limit 10`) run **weekly**, not nightly. Full 100-task suite (50 zh/50 en) run **monthly or on-demand** (e.g., before a portfolio milestone), never automated nightly | Nightly full suite (rejected outright) | Researched judge cost alone (RACE: GPT-5.5, ~2 calls/question; FACT: GPT-5.4-mini, 1 extraction + 1 validation call per unique cited URL, ~15–30 URLs/report) is ~$15–35 per 100-question run for judging *only*. Adding this project's own agent execution cost (deep-research reports involve materially more tool calls than a FRAMES/MuSiQue Q&A) pushes a full nightly run toward $120–330/run — not solo-engineer-nightly-affordable by any reasonable threshold. A 10-question weekly subset keeps this to a rough $15–35/week (see §5 cost table). | Actual measured Session-4 cost per DeepResearch Bench report comes in far below this estimate (e.g., if the agent's own report generation is cheaper than assumed). Response: raise the weekly subset size, or move to nightly for the subset while keeping the full 100 monthly. |
 | 12 | **Deploy compute** | ECS Fargate (cluster + service + task def, `infra/modules/ecs`) | EKS (managed Kubernetes); a raw EC2 box (docker run + systemd/cron) | EKS's control-plane fee ($0.10/hr ≈ $73/mo) alone blows the $25/mo demo budget before a single workload runs, and K8s's value (multi-node bin-packing, complex rollout strategies, operator ecosystem) buys nothing at 2–10 users on one task — it's cost and complexity with no attached metric, which this project's own "every box earns its metric" rule rejects outright. A raw EC2 box is cheaper but has no deploy story (no task-def-as-config, no rolling deploy, no separation between "role that pulls the image" and "role the app runs as") and nothing to demonstrate about IAM boundary design. Fargate sits at the point that's actually arguable: no control-plane fee, no host patching, `aws ecs update-service --force-new-deployment` is the whole deploy story, and task execution role vs. task role is a real least-privilege boundary worth showing. **This is the row that answers "why not EKS" in an interview.** | Concurrency needs outgrow what target-tracking on one task family can smooth (e.g., sustained >10-15 concurrent research runs), or a second workload needs to share the cluster's bin-packing — at that point EKS's operator ecosystem starts paying for itself and Fargate's per-task pricing stops being cheaper than densely-packed EC2 nodes. |
 | 13 | **Deploy data layer** | Containers-in-task: Postgres + Redis run as additional containers in the same Fargate task definition (`infra/modules/ecs`), sharing the task's ENI (`localhost` networking) and ephemeral task storage. Managed-service Terraform (`infra/modules/data_managed`: RDS Postgres + ElastiCache Redis) is written and wired behind `var.use_managed_data_layer`, default `false` | RDS Postgres + ElastiCache Redis, always-on managed services | An ALB (~$16.4/mo fixed) + one Fargate task (0.5 vCPU/1GB ≈ $18/mo if left running 24/7) already consumes most of the $25/mo budget; adding RDS db.t3.micro (~$12-13/mo) + ElastiCache cache.t3.micro (~$12/mo) would blow it by ~2x if the stack were left running continuously. The demo's actual usage pattern — `terraform apply`, hit the live URL once to prove it, `terraform destroy` (task 4's teardown/reapply cycle) — means real spend is hours not a full month, but the *architecture* still shouldn't assume "leave it up." Containers-in-task costs nothing beyond the one task's compute and matches non-goal "no multi-tenant, single-box-shaped deployment." Both paths exist in code so the swap is a variable flip, not a rewrite, once budget allows leaving it up continuously. | A demo needs to stay up continuously (not apply→verify→destroy) and RDS/ElastiCache's ~$24-25/mo combined cost becomes affordable on its own budget line, or task-restart data loss (ephemeral storage, no volume) becomes a real problem worth paying for durability. Flip `use_managed_data_layer = true`. |
+| 14 | **Orchestration engine** (rebuilt 2026-07-18, see §11) | One LangGraph `StateGraph` (`agent/graph.py`), no config-selectable alternative engine: `plan → supervisor(readiness router, not its own node) → subagent(ReAct: search/calculate via ToolNode, +inline per-hop verify) → synthesis → reflection`, `Send` for the readiness-gated wave fan-out, an `AsyncSqliteSaver` checkpointer keyed by `thread_id=run_id` (the "future Phase-3 checkpointer" this row previously deferred is now wired), budget/correction/reflection gates evaluated as pure state reads that route to synthesis/END rather than raising | Kept for history: the previous `config.orchestration` flip between this LangGraph path and the original hand-rolled `asyncio.gather` + `while True` loop (`agent/orchestrator_native.py`); a separate `agent_mode="react_agent"` LangGraph topology alongside the plan-first one | The native-vs-langgraph ablation this row originally recorded is resolved and closed out — the LangGraph path had already fully replaced native by the time this rebuild started, and native was deleted (no test exercised it, no config path selected it). This rebuild's own reason for touching orchestration again was different: the multi-hop DAG (row 1) and the collapse of plan-first/react_agent into one topology (row 2) both required real changes to `agent/graph.py`'s node set, not just a migration of the same nodes to a new engine. `langgraph.prebuilt.ToolNode` — rejected in the prior version of this row for the plan-first path's imperative search/fetch/rerank calls — is now used **inside every subagent node**, since every node is ReAct now; the rejection reasoning for the old imperative-worker path is obsolete, not wrong at the time. One real implementation finding worth recording: a static edge from a `Send`-fanned-out node coalesces into one downstream call per wave over the fully-merged state (confirmed by direct experiment) — so the per-hop verify gate had to be folded *inside* the subagent node rather than living as its own downstream node, a LangGraph mechanic this project hadn't hit before. Verified offline only (`tests/test_graph.py`, `tests/test_subagent.py`, `tests/test_checkpointer.py`, `tests/test_orchestrator_persistence.py` — 94/94 green); two real bugs (a `Send`-payload field never threaded through, causing every subagent's budget clock to start at zero; a tool-call's recorded span_id captured statically instead of from the active span) were caught by this session's own tests before any live-model run, not by a separate audit. | A live-model run (not yet performed this session) shows the unified graph's per-node ReAct cost (the thing `react_agent` measured at ~2x tokens/+83% cost vs. the old plan-first) now applies to *every* node instead of being an opt-in mode, and that cost isn't offset by only paying it on nodes that actually need multi-hop chaining. Response: investigate a cheaper non-ReAct path for leaf nodes with no `depends_on` and nothing depending on them (skip the tool-calling loop entirely for pure single-lookup facets), reintroducing exactly the imperative-worker distinction this rebuild removed, but only if the cost data justifies it. |
 
 ## 3. Architecture diagram
+
+Superseded 2026-07-18 (see §11) — kept for history, describes the pre-rebuild
+plan-first-only pool topology (decision rows 1/2/3/14 as originally written):
 
 ```mermaid
 flowchart TD
@@ -86,6 +90,53 @@ flowchart TD
 
     Orchestrator -. "OTel spans, run_id = trace_id" .-> Langfuse[Langfuse]
     Pool -. "OTel spans" .-> Langfuse
+    SearchIface & Fetch & Rerank -. "OTel spans" .-> Langfuse
+    Orchestrator --> RunStore[("Postgres: runs, trajectories, tool_calls, eval_scores, ci_baselines")]
+    Langfuse --> Grafana["Prometheus/Grafana: infra metrics"]
+```
+
+**Current** (see §11 for the full rationale):
+
+```mermaid
+flowchart TD
+    Client["Client — POST /research"] --> API[FastAPI service]
+    API --> Orchestrator
+
+    subgraph Orchestrator["agent/graph.py — one LangGraph StateGraph"]
+        Plan["plan: question -> dependency DAG of retrieval nodes"]
+        Supervisor["supervisor: readiness router (not its own node) —\nrecomputes every wave which nodes have all\ndepends_on verified"]
+        Synth["synthesis: dependency-ordered claim -> source cited report"]
+        Reflect["reflection: post-synthesis gap check, bounded follow-up nodes"]
+    end
+
+    Plan --> Supervisor
+    Supervisor -->|"Send one per ready node, this wave"| Subagents
+    subgraph Subagents["subagent (ReAct, one per ready node, parallel within a wave)"]
+        S1["node 1: agent ⇄ tools(search, calculate) + inline verify"]
+        S2["node 2: agent ⇄ tools(search, calculate) + inline verify"]
+        SN["node N: agent ⇄ tools(search, calculate) + inline verify"]
+    end
+    Subagents -->|"verified/failed -> supervisor recomputes readiness"| Supervisor
+    Supervisor -->|"no ready nodes left, or budget ceiling"| Synth
+
+    S1 & S2 & SN --> SearchIface["SearchBackend interface"]
+    SearchIface --> Tavily["Tavily API (live)"]
+    SearchIface --> LocalCorpus["LocalCorpusBackend (fixed corpus: FRAMES/MuSiQue gold docs, CI)"]
+
+    S1 & S2 & SN --> Fetch["Fetch / extract"]
+    Fetch <--> Cache[("Redis — query+URL cache, TTL")]
+    Fetch --> Rerank["RerankBackend: bge-reranker-v2-m3 (default) / Cohere (optional)"]
+    Rerank --> Finding["Finding: answer, claims[{text, source_id, quote, confidence}],\nentities_extracted, confidence, open_gaps"]
+    Finding --> S1
+
+    Synth --> Reflect
+    Reflect -->|"real gap found and reflection_iters < max_reflect"| Supervisor
+    Reflect -->|"no gaps OR ceiling hit"| Report["Cited report + claim->source map"]
+    Report --> API
+
+    Orchestrator -.->|"AsyncSqliteSaver checkpoint, thread_id = run_id"| Checkpoint[("checkpoints.sqlite")]
+    Orchestrator -. "OTel spans, run_id = trace_id" .-> Langfuse[Langfuse]
+    Subagents -. "OTel spans" .-> Langfuse
     SearchIface & Fetch & Rerank -. "OTel spans" .-> Langfuse
     Orchestrator --> RunStore[("Postgres: runs, trajectories, tool_calls, eval_scores, ci_baselines")]
     Langfuse --> Grafana["Prometheus/Grafana: infra metrics"]
@@ -402,3 +453,128 @@ the *size* of finding 1's cost gap (react isn't marginally more expensive,
 it's ~2x on every real mechanical axis) and the honest gap in finding 2
 (this subset's questions are too narrow to actually stress the thing the
 sweep was meant to test).
+
+## 11. Addendum (2026-07-18) — unified planner→supervisor→subagent→verify→synthesis→reflection rebuild
+
+Directive: collapse the three parallel orchestration topologies that had
+accumulated (plan-first parallel pool, thin sequential `react` mode, the
+standalone tool-calling `react_agent`) plus the retained hand-rolled
+`orchestrator_native.py` ablation baseline, into **one** LangGraph
+`StateGraph` that does what none of the three did alone: an explicit
+multi-hop dependency DAG, readiness-gated wave dispatch (parallel where
+independent, sequential where dependent — one topology, not a config flip
+between two), a tool-calling ReAct subagent per plan node, a per-hop
+grounding gate, dependency-ordered cited synthesis, and a bounded
+post-synthesis reflection loop. Plus: wire the LangGraph checkpointer
+this project had deferred as a "future Phase-3" item since the original
+langgraph migration (decision row 14).
+
+**What changed, mapped to the decision table**: rows 1 (topology), 2
+(planning style), 3 (stopping criteria), and 14 (orchestration engine) are
+superseded/revised above, each with its own before/after and reversal
+evidence. Row 4 (context management)'s underlying principle — structured
+notes, never raw transcript — is unchanged; only the container renamed
+(`WorkerNotes` → `Finding`, gaining `entities_extracted` specifically to fuel
+`facts_for()`'s upstream-entity injection into a dependent hop's brief).
+
+**New data contract**: `Finding {node_id, question, answer, claims, entities_extracted, confidence, open_gaps, verified}`
+replaces the old worker-only `WorkerNotes` as the primary per-node research
+artifact (`WorkerNotes` is still produced, as a compatibility adapter, so
+`eval/metrics/citation.py` — which reads `worker_notes[].claims` — didn't
+need to change). `SubQuestion` gained `depends_on: list[str]`, making it the
+plan's DAG node (`agent/dag.py` validates the graph — unique ids, known
+deps, acyclic, within a new `max_nodes` over-decomposition ceiling — before
+the supervisor ever sees it).
+
+**Node-granularity rule, new and load-bearing**: a plan node exists *iff* it
+requires retrieval. The planner is explicitly instructed never to emit a
+compare/aggregate/compute node ("compare the two birth years") — that step
+happens in synthesis once all dependency-graph nodes resolve, never as a
+node of its own. Exact arithmetic (FRAMES-style numeric questions) rides the
+owning hop's own `calculate` tool call by default; only a question that
+computes across *multiple independent* findings would need a terminal
+compute node, and the planner is steered away from that as the common case.
+
+**A real LangGraph mechanic learned the hard way, worth recording for future
+sessions**: the original 3-node sketch for this design (`subagent → verify →
+supervisor`, verify as its own node) does not survive real parallel `Send`
+fan-out. Confirmed by a standalone repro before writing any production
+code: a static edge from a `Send`-fanned-out node coalesces into **one**
+downstream call per wave, and that call sees the fully merged state of every
+parallel branch — there is no way for a separate `verify` node to know which
+finding belongs to which branch. The fix: fold the verify check *inside*
+the same `Send`-dispatched node that ran the ReAct subagent, before it
+returns its state update. Functionally identical to the sketch; structurally
+necessary for correctness under real concurrency.
+
+**Two real bugs this rebuild's own test suite caught before any live-model
+run** (neither pre-existing — both introduced by this rebuild's own new
+code, only surfaced once a test exercised a genuine multi-turn tool-calling
+loop with a live budget check, which no earlier phase's tests happened to
+do): the supervisor's `Send` payload never carried `started_monotonic`
+forward, so every subagent's inner ReAct loop computed elapsed wall-clock
+time from epoch zero, instantly tripping the budget gate and silently
+skipping every tool call after one turn; and the `search`/`calculate` tools
+recorded `tool_calls.span_id` from a static value captured once at
+context-construction time instead of the dynamically-active OTel span,
+breaking the FK-style relationship between a tool call and the trajectory
+row it nests under. Both fixed; both now covered by regression tests
+(`tests/test_orchestrator_persistence.py`'s tool-call-FK assertion,
+`tests/test_checkpointer.py`/`tests/test_graph.py`'s live budget-path
+coverage).
+
+**Checkpointer**: `langgraph-checkpoint-sqlite`'s `AsyncSqliteSaver`, keyed
+by `thread_id=run_id`, wired into `agent/orchestrator.py`. A new
+`resume_run_id` parameter on `run_research()` reuses the original `runs` row
+(no duplicate-key insert) and passes `input=None` to `graph.astream` —
+LangGraph's documented resume idiom, continuing from the last checkpointed
+superstep rather than restarting. Verified with `interrupt_after=["plan"]`
+(LangGraph's own durable-pause mechanism, chosen over manually racing an
+async generator mid-stream, which isn't deterministic) plus a call-counting
+stub proving `plan_node` never re-runs on resume, and a second test proving
+a different `thread_id` against the same checkpointer file starts a
+genuinely independent run.
+
+**Scope verified this session**: the test suite in this addendum's scope
+(`tests/test_planner.py`, `test_subagent.py`, `test_graph.py`,
+`test_checkpointer.py`, `test_orchestrator_persistence.py`) runs offline
+against stubbed structured-JSON LLMs and stubbed LangChain chat models, no
+network, no real provider key — 94/94 green. A same-day follow-up (see
+docs/RESULTS.md's next entry) additionally ran the unified graph live against
+a real model (`google/gemini-2.5-flash` via OpenRouter) on one genuine 2-hop
+dependency question, end-to-end, correctly — the first real-model smoke
+signal, not just offline mechanics. That is one hand-picked question, not a
+benchmark; the row-2 evidence column above still names the actual open
+measurement: a live-model MuSiQue slice, scored per-hop, to confirm this
+rebuild captures `react_agent`'s multi-hop accuracy gain (measured
+2026-07-18, pre-rebuild) without paying its full ~2x-cost premium on
+all-independent questions.
+
+That same follow-up also replaced `llm/client.py`'s hand-rolled JSON-schema
+dicts + manual `json.loads` with the `instructor` library
+(`response_model=<PydanticModel>`, renamed `complete_json` →
+`complete_structured`) — every structured LLM call site now shares one
+source of truth (a Pydantic model) instead of a schema dict kept in sync by
+hand, plus automatic validation-retry. One real, non-obvious finding from
+that swap: Instructor's default `Mode.TOOLS` silently flattened nested
+`SubQuestion` objects into plain strings for `google/gemini-2.5-flash`,
+never converging across 4 auto-retries — fixed by explicitly pinning
+`Mode.JSON_SCHEMA` (OpenRouter) / `Mode.ANTHROPIC_JSON` (Anthropic, chosen by
+the same reasoning but not live-verified — Anthropic credit still
+exhausted), matching the API-native structured-output mechanism the
+pre-Instructor code already used. Verified at parity cost/tokens with the
+pre-swap live run. Full details in docs/RESULTS.md.
+
+**Files added**: `agent/dag.py`, `agent/subagent.py`, new prompts
+`finding_v1.txt` / `hop_verify_v1.txt` / `reflection_post_synthesis_v1.txt`,
+`tests/test_planner.py` / `test_subagent.py` / `test_graph.py` /
+`test_checkpointer.py`. **Files deleted**: `agent/orchestrator_native.py`,
+`agent/react.py`, `agent/worker.py`, `agent/reflection.py`,
+`agent/multihop_graph.py` (its content became the new `agent/graph.py`;
+the old `graph.py` it replaced is gone), `prompts/worker_v1.txt` /
+`react_v1.txt` / `reflection_v1.txt` / `finalize_v1.txt` / `verify_v1.txt`,
+`scripts/architecture_ablation.py`, `tests/test_graph_parity.py`,
+`tests/test_multihop_graph.py` (renamed `test_graph.py`). **Config fields
+removed**: `orchestration`, `agent_mode`, `planning_style`,
+`coverage_threshold`. **Config fields added**: `max_nodes`, `max_reflect`,
+`checkpoint_db_path`.

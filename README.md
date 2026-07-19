@@ -13,9 +13,6 @@ hard budget enforcement, and a Postgres run store behind it.
 ## Demo
 
 ![demo](docs/assets/demo.png)
-*(placeholder — capture from the live streaming UI at `/ui/` once running:
-`docker compose up --build -d`, then open http://localhost:8000/ui/, ask a
-question, screenshot the live trace + cited report.)*
 
 ```bash
 python -m deepresearch.cli "Which came first, the Eiffel Tower or the Statue of Liberty?"

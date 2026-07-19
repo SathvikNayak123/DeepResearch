@@ -13,8 +13,9 @@ that's already in that table — extend it if new evidence arrives.
 
 - Every architectural box must have a metric attached, or it doesn't ship.
 - "The agent decides" is not a stopping criterion. Stopping logic is always
-  explicit and configurable: max iterations/replans, coverage self-check
-  threshold, budget ceiling.
+  explicit and configurable: per-hop retries (`max_corrections`), bounded
+  post-synthesis reflection (`max_reflect`), planner over-decomposition
+  ceiling (`max_nodes`), budget ceiling.
 - Redis is a cache (search-query results + fetched pages, keyed + TTL'd) — **not**
   agent memory. Never repurpose it for cross-run reasoning state.
 - Report distributions, never point estimates. Reliability evals repeat a subset
@@ -24,8 +25,13 @@ that's already in that table — extend it if new evidence arrives.
 
 ## Key design decisions (see docs/DESIGN.md §2 for full table + reversal evidence)
 
-- Topology: orchestrator + bounded parallel sub-question worker pool (max 4–6).
-- Planning: plan-first with bounded re-planning (≤2 replans on reflection).
+- Topology: one LangGraph StateGraph — planner emits a dependency DAG, a
+  supervisor router fans out ready nodes wave-by-wave (parallel where
+  independent, sequential where dependent), each node is a tool-calling
+  ReAct subagent with an inline per-hop verify gate (§11 in DESIGN.md).
+- Planning: single planner + subagent design (no more plan-first-vs-react_agent
+  mode flag); bounded per-hop retries (`max_corrections`) and bounded
+  post-synthesis reflection (`max_reflect`).
 - Context: structured notes (claim/source_id/quote/confidence) between workers and
   synthesis, never full-transcript stuffing. Token budgets enforced per stage.
 - Search: Tavily primary, behind a `SearchBackend` protocol with a

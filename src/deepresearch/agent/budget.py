@@ -44,3 +44,24 @@ class BudgetTracker:
 
     def register_replan(self) -> None:
         self.replans += 1
+
+
+def budget_status(state: dict, budget: BudgetConfig) -> str | None:
+    """Pure translation of BudgetTracker.check() — reads accumulated state
+    instead of a live tracker object, so it can be evaluated freely from
+    routers without mutating anything. Lives here (not in agent/graph.py)
+    specifically so agent/graph.py and agent/react_agent.py can both import
+    it without a circular import between them (graph.py needs react_agent's
+    _record; react_agent's _agent_route needs this). Used against both
+    MultihopState and agent/subagent.py's SubagentState (structurally
+    compatible: both carry started_monotonic/tokens_in/tokens_out/cost_usd)."""
+    elapsed = time.monotonic() - state["started_monotonic"]
+    if elapsed > budget.max_wall_clock_seconds:
+        return f"wall_clock_exceeded: {elapsed:.1f}s > {budget.max_wall_clock_seconds}s"
+    total_tokens = state.get("tokens_in", 0) + state.get("tokens_out", 0)
+    if total_tokens > budget.max_total_tokens:
+        return f"total_tokens_exceeded: {total_tokens} > {budget.max_total_tokens}"
+    cost_usd = state.get("cost_usd", 0.0)
+    if cost_usd > budget.max_usd:
+        return f"cost_exceeded: ${cost_usd:.4f} > ${budget.max_usd}"
+    return None

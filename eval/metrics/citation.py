@@ -5,14 +5,11 @@ quote they cite."""
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from deepresearch.schemas import RunResult
 
 from eval.judge import Judge
-
-CITATION_MARKER_RE = re.compile(r"\[(src_\d+)\]")
 
 
 @dataclass
@@ -29,7 +26,15 @@ async def compute_citation_metrics(result: RunResult, judge: Judge) -> CitationM
     if result.report is None:
         return CitationMetrics(coverage=0.0, precision=0.0, n_claims_checked=0)
 
-    cited_source_ids = set(CITATION_MARKER_RE.findall(result.report.text))
+    # Which source_ids the model actually cited -- read directly from the
+    # structured synthesis output (Report.citations, populated from
+    # SynthesisDraft.cited_source_ids), not re-derived by regex-parsing the
+    # free-form report text. A regex-based version of this broke silently on
+    # real model output that cited multiple ids in one bracket
+    # (`[src_a, src_b]` -- `\w+` can't span the comma, so the whole marker
+    # was missed); reading the already-validated structured field sidesteps
+    # every such formatting variance entirely.
+    cited_source_ids = {c.source_id for c in result.report.citations}
 
     all_claims = [claim for notes in result.worker_notes for claim in notes.claims]
     checked_claims = [claim for claim in all_claims if claim.source_id in cited_source_ids]

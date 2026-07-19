@@ -1,0 +1,22 @@
+{
+  "musique": {
+    "benchmark": "musique",
+    "n": 20,
+    "is_real_llm": true,
+    "wall_clock_seconds": 656.0178600999989,
+    "mean_answer_f1": 0.0667195324636514,
+    "mean_answer_contains_gold": 0.5,
+    "mean_answer_f1_extracted": 0.43166666666666664,
+    "trajectory": {
+      "task_completion_rate": 1.0,
+      "tool_call_success_rate": 1.0,
+      "mean_steps_per_solved_task": 43.6,
+      "mean_tokens_per_solved_task": 10601.0,
+      "n_runs": 20
+    },
+    "total_agent_cost_usd": 0.1359618,
+    "extraction_calls_made": 20,
+    "extraction_cache_hits": 0,
+    "extraction_actual_cost_usd": 0.0007572
+  }
+}

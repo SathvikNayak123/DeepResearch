@@ -1,0 +1,22 @@
+{
+  "frames": {
+    "benchmark": "frames",
+    "n": 20,
+    "is_real_llm": true,
+    "wall_clock_seconds": 1466.5752928000002,
+    "mean_accuracy": 0.45,
+    "mean_citation_coverage": 0.5814484126984126,
+    "mean_citation_precision": 0.5483333333333333,
+    "trajectory": {
+      "task_completion_rate": 1.0,
+      "tool_call_success_rate": 0.9977678571428571,
+      "mean_steps_per_solved_task": 22.4,
+      "mean_tokens_per_solved_task": 34103.95,
+      "n_runs": 20
+    },
+    "total_agent_cost_usd": 0.2756397,
+    "judge_calls_made": 56,
+    "judge_cache_hits": 0,
+    "judge_actual_cost_usd": 0.002305100000000001
+  }
+}
